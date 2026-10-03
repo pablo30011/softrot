@@ -175,7 +175,8 @@
       inset: 0;
       z-index: 20;
       height: var(--viewport-height);
-      touch-action: manipulation;
+      touch-action: pan-y;
+      overscroll-behavior: contain;
       overflow: hidden;
       display: grid;
       place-items: center;
@@ -186,10 +187,10 @@
         max(24px, env(safe-area-inset-left));
       background: transparent;
       opacity: 1;
-      transition: opacity 1100ms cubic-bezier(.22,.61,.36,1);
+      transition: transform 850ms cubic-bezier(.22,.61,.36,1);
       isolation: isolate;
     }
-    #intro.leaving { opacity: 0; pointer-events: none; z-index: 0; }
+    #intro.leaving { transform: translateY(-100%); pointer-events: none; }
 
     .cloud-field,
     #rainVisual {
@@ -312,31 +313,19 @@
       font-style: italic;
       color: rgba(244, 246, 246, .56);
     }
-    #enterButton {
+    #entryPrompt {
       margin: 24px auto 0;
-      min-width: 58px;
-      min-height: 54px;
-      display: inline-grid;
-      place-items: center;
-      border: 0;
-      background: transparent;
-      color: rgba(246, 247, 246, .72);
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 34px;
-      font-weight: 400;
-      line-height: 1;
-      cursor: pointer;
-      pointer-events: none;
+      color: rgba(246, 247, 246, .62);
+      font-size: 13px;
+      line-height: 1.55;
+      letter-spacing: .02em;
     }
-    #enterButton.shown { pointer-events: auto; }
-    #enterButton .arrow-glyph { display: inline-block; transition: transform 350ms ease, color 350ms ease; }
-    #enterButton:hover .arrow-glyph { transform: translateX(5px); color: rgba(255,255,255,.9); }
 
     @media (max-width: 560px) {
       #introCopy { transform: translateY(-1vh); }
       #softrotTitle { margin-bottom: 24px; }
       #tagline { margin-top: 22px; }
-      #enterButton { margin-top: 18px; }
+      #entryPrompt { margin-top: 18px; }
     }
 
 
@@ -351,12 +340,12 @@
       #manifesto, #scrollLine { font-size: 14px; line-height: 1.4; }
       #scrollLine { margin-top: 8px; }
       #tagline { font-size: 15px; margin-top: 8px; line-height: 1.4; }
-      #enterButton { margin-top: 10px; min-height: 44px; }
+      #entryPrompt { margin-top: 10px; font-size: 12px; line-height: 1.4; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       .cloud, .rain-drop { animation: none !important; }
-      .reveal, #intro, #soundPrompt, #enterButton .arrow-glyph { transition-duration: 0.01ms !important; }
+      .reveal, #intro, #soundPrompt { transition-duration: 0.01ms !important; }
       #feed { scroll-behavior: auto; }
     }
   </style>
@@ -400,7 +389,7 @@
       <p id="manifesto" class="reveal">No outrage. No optimization.</p>
       <p id="scrollLine" class="reveal">Satisfy the urge to scroll<br>without being pulled anywhere.</p>
       <p id="tagline" class="reveal">Gentle brainrot from the forgotten corners of the internet.</p>
-      <button id="enterButton" class="reveal" type="button" aria-label="Enter Softrot"><span class="arrow-glyph">→</span></button>
+      <p id="entryPrompt" class="reveal">stay for a moment<br>or keep moving<br>swipe away to begin</p>
     </div>
 
     <audio id="introMusic" src="aquatic-ambience.mp3" preload="auto" loop></audio>
@@ -427,7 +416,7 @@
     const manifesto = document.querySelector('#manifesto');
     const scrollLine = document.querySelector('#scrollLine');
     const tagline = document.querySelector('#tagline');
-    const enterButton = document.querySelector('#enterButton');
+    const entryPrompt = document.querySelector('#entryPrompt');
     const introMusic = document.querySelector('#introMusic');
     const introRain = document.querySelector('#introRain');
     const rainVisual = document.querySelector('#rainVisual');
@@ -443,6 +432,8 @@
     const RECENT_LIMIT = 18;
     let feedEnabled = false;
     let introSoundStarted = false;
+    let entryPromptReady = false;
+    let introTouchStart = null;
     let entering = false;
     let programmatic = false;
     let recycling = false;
@@ -801,24 +792,6 @@
         slot.player.setVolume(100);
         slot.player.unMute();
         slot.player.playVideo();
-      } catch (_) {}
-      resumeRainPlayback();
-    }
-
-    function resumeRainPlayback() {
-      if (!rainEnabled || !feedEnabled) return;
-      try {
-        introRain.loop = true;
-        introRain.muted = false;
-        const result = introRain.play();
-        const restoreVolume = () => {
-          if (rainEnabled && feedEnabled) introRain.volume = 0.075;
-        };
-        if (result && typeof result.then === 'function') {
-          result.then(restoreVolume).catch(() => {});
-        } else {
-          restoreVolume();
-        }
       } catch (_) {}
     }
 
@@ -1200,10 +1173,7 @@
     });
 
     document.addEventListener('pointermove', wakeControls, { passive: true });
-    document.addEventListener('touchstart', () => {
-      wakeControls();
-      resumeRainPlayback();
-    }, { passive: true });
+    document.addEventListener('touchstart', wakeControls, { passive: true });
 
     document.addEventListener('keydown', (event) => {
       if (!feedEnabled) return;
@@ -1349,21 +1319,56 @@
       setTimeout(() => manifesto.classList.add('shown'), 2300);
       setTimeout(() => scrollLine.classList.add('shown'), 4000);
       setTimeout(() => tagline.classList.add('shown'), 6200);
-      setTimeout(() => enterButton.classList.add('shown'), 8700);
+      setTimeout(() => {
+        entryPrompt.classList.add('shown');
+        entryPromptReady = true;
+      }, 8700);
     }
 
     intro.addEventListener('click', () => {
-      if (introSoundStarted) return;
-      introSoundStarted = true;
-      soundPrompt.classList.add('fading');
-      setTimeout(() => { soundPrompt.style.display = 'none'; }, 700);
-      tryStartAudio(introMusic, 0.35);
-      if (rainEnabled) tryStartAudio(introRain, 0.13);
-      revealIntroCopy();
+      if (!introSoundStarted) {
+        introSoundStarted = true;
+        soundPrompt.classList.add('fading');
+        setTimeout(() => { soundPrompt.style.display = 'none'; }, 700);
+        tryStartAudio(introMusic, 0.35);
+        if (rainEnabled) tryStartAudio(introRain, 0.13);
+        revealIntroCopy();
+        return;
+      }
+      if (entryPromptReady && matchMedia('(hover: hover) and (pointer: fine)').matches) enterFeed();
     });
 
-    enterButton.addEventListener('click', () => {
-      if (entering) return;
+    intro.addEventListener('touchstart', (event) => {
+      if (event.touches.length !== 1) {
+        introTouchStart = null;
+        return;
+      }
+      introTouchStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }, { passive: true });
+
+    intro.addEventListener('touchend', (event) => {
+      const start = introTouchStart;
+      introTouchStart = null;
+      if (!start || !entryPromptReady || entering) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - start.x;
+      const upwardDistance = start.y - touch.clientY;
+      if (upwardDistance >= 60 && upwardDistance > Math.abs(deltaX) * 1.2) enterFeed();
+    }, { passive: true });
+
+    intro.addEventListener('touchcancel', () => { introTouchStart = null; }, { passive: true });
+
+    document.addEventListener('keydown', (event) => {
+      if (feedEnabled || !entryPromptReady) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        enterFeed();
+      }
+    });
+
+    function enterFeed() {
+      if (entering || !entryPromptReady) return;
       entering = true;
       feedEnabled = true;
       document.body.classList.add('feed-live');
@@ -1388,7 +1393,7 @@
         try { introMusic.pause(); introMusic.currentTime = 0; introMusic.volume = 0; } catch (_) {}
         intro.remove();
       }, 1250);
-    });
+    }
 
     try {
       setAutoplayEnabled(true);
