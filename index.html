@@ -452,6 +452,7 @@
     let watchTimer = null;
     let autoplayEnabled = true;
     let rainEnabled = true;
+    let displayedAutoplaySeconds = null;
     let queuedDirection = 0;
     let queuedDirectionTimer = null;
     let controlsSleepTimer = null;
@@ -646,6 +647,7 @@
       try {
         if (slot.player.getPlayerState() === YT.PlayerState.PLAYING) {
           watchedMs = Math.min(WATCH_MS, watchedMs + elapsed);
+          updateAutoplayToggleLabel();
         }
       } catch (_) {}
     }
@@ -661,6 +663,7 @@
       clearWatchTimer({ subtract: true });
       watchedMs = 0;
       lastWatchTickAt = 0;
+      updateAutoplayToggleLabel();
     }
 
     function startWatchTimer({ fresh = false } = {}) {
@@ -707,9 +710,6 @@
 
     function setAutoplayEnabled(enabled) {
       autoplayEnabled = Boolean(enabled);
-      autoplayToggle.setAttribute('aria-pressed', autoplayEnabled ? 'true' : 'false');
-      autoplayToggle.setAttribute('aria-label', autoplayEnabled ? 'Autoplay on, 15 seconds. Press A to turn off.' : 'Autoplay off. Press A to turn on.');
-      autoplayToggle.textContent = autoplayEnabled ? 'auto 15s' : 'auto off';
 
       if (autoplayEnabled) {
         resetWatchTimer();
@@ -717,6 +717,19 @@
       } else {
         clearWatchTimer();
       }
+      updateAutoplayToggleLabel();
+    }
+
+    function updateAutoplayToggleLabel() {
+      const remainingSeconds = Math.ceil(Math.max(0, WATCH_MS - watchedMs) / 1000);
+      const text = autoplayEnabled ? `auto ${remainingSeconds}s` : 'auto off';
+      if (text === displayedAutoplaySeconds) return;
+      displayedAutoplaySeconds = text;
+      autoplayToggle.setAttribute('aria-pressed', autoplayEnabled ? 'true' : 'false');
+      autoplayToggle.setAttribute('aria-label', autoplayEnabled
+        ? `Autoplay on, ${remainingSeconds} seconds remaining. Press A to turn off.`
+        : 'Autoplay off. Press A to turn on.');
+      autoplayToggle.textContent = text;
     }
 
     autoplayToggle.addEventListener('click', () => {
@@ -788,6 +801,20 @@
         slot.player.setVolume(100);
         slot.player.unMute();
         slot.player.playVideo();
+      } catch (_) {}
+      resumeRainIfPaused();
+    }
+
+    function resumeRainIfPaused() {
+      if (!rainEnabled || !feedEnabled || !introRain.paused) return;
+      try {
+        introRain.loop = true;
+        const result = introRain.play();
+        if (result && typeof result.then === 'function') {
+          result.then(() => fadeAudio(introRain, 0.075, 350)).catch(() => {});
+        } else {
+          fadeAudio(introRain, 0.075, 350);
+        }
       } catch (_) {}
     }
 
