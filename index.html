@@ -1,0 +1,1380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Softrot / 0views</title>
+  <style>
+    :root {
+      --viewport-height: 100vh;
+      --usable-height: calc(var(--viewport-height) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      --usable-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+      color-scheme: dark;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #000;
+    }
+    @supports (height: 100svh) { :root { --viewport-height: 100svh; } }
+    @supports (height: 100dvh) { :root { --viewport-height: 100dvh; } }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #69757d; color: #fff; }
+    html, body { overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    button { font: inherit; touch-action: manipulation; }
+
+    /* ---------- Existing feed, using free continuous scrolling ---------- */
+    #atmosphere {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      background: #69757d;
+      isolation: isolate;
+    }
+    #atmosphere::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background: rgba(25, 34, 40, .12);
+      pointer-events: none;
+    }
+    #app { position: fixed; inset: 0; height: var(--viewport-height); z-index: 1; background: transparent; opacity: 0; pointer-events: none; transition: opacity 1100ms cubic-bezier(.22,.61,.36,1); }
+    #app.entered { opacity: 1; pointer-events: auto; }
+    #feed {
+      display: flex;
+      flex-direction: column;
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: none;
+      touch-action: pan-y pinch-zoom;
+      scroll-snap-type: y mandatory;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      background: transparent;
+    }
+    #feed::-webkit-scrollbar { display: none; }
+    .video-slide {
+      flex-shrink: 0;
+      position: relative;
+      width: 100%;
+      height: var(--viewport-height);
+      min-height: var(--viewport-height);
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      display: grid;
+      place-items: center;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      background: transparent;
+    }
+    .phone {
+      position: relative;
+      width: min(var(--usable-width), calc(var(--usable-height) * 9 / 16));
+      height: min(var(--usable-height), calc(var(--usable-width) * 16 / 9));
+      min-width: 200px;
+      min-height: 200px;
+      max-width: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    @media (max-width: 700px) {
+      .phone {
+        width: max(200px, min(var(--usable-width), calc((var(--usable-height) - 132px) * 9 / 16)));
+        height: max(200px, min(calc(var(--usable-height) - 132px), calc(var(--usable-width) * 16 / 9)));
+      }
+    }
+    .player-host,
+    .player-host iframe { width: 100% !important; height: 100% !important; }
+    .player-host { position: absolute; inset: 0; background: #000; }
+    .shade { display: none; }
+    #rainToggle {
+      position: fixed;
+      left: calc(14px + env(safe-area-inset-left, 0px));
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      z-index: 40;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: rgba(0, 0, 0, .42);
+      color: rgba(255, 255, 255, .72);
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: .02em;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: opacity .2s ease, background .2s ease;
+      opacity: .72;
+    }
+    #rainToggle:hover { opacity: 1; }
+    #rainToggle[aria-pressed="false"] {
+      background: rgba(0, 0, 0, .28);
+      color: rgba(255, 255, 255, .46);
+    }
+
+    #autoplayToggle {
+      position: fixed;
+      right: calc(14px + env(safe-area-inset-right, 0px));
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+      z-index: 40;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: rgba(0, 0, 0, .42);
+      color: rgba(255, 255, 255, .72);
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: .02em;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: opacity .2s ease, background .2s ease;
+      opacity: .72;
+    }
+    #autoplayToggle:hover { opacity: 1; }
+    #autoplayToggle[aria-pressed="false"] {
+      background: rgba(0, 0, 0, .28);
+      color: rgba(255, 255, 255, .46);
+    }
+    #rainToggle,
+    #autoplayToggle {
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.feed-live #rainToggle,
+    body.feed-live #autoplayToggle {
+      opacity: .16;
+      pointer-events: auto;
+    }
+    body.feed-live.controls-awake #rainToggle,
+    body.feed-live.controls-awake #autoplayToggle { opacity: .58; }
+    body.feed-live #rainToggle:hover,
+    body.feed-live #autoplayToggle:hover { opacity: 1; }
+
+    #message {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      place-items: center;
+      padding: 28px;
+      text-align: center;
+      background: #000;
+      color: #fff;
+    }
+
+    /* ---------- Softrot intro ---------- */
+    #intro {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      height: var(--viewport-height);
+      touch-action: manipulation;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      padding:
+        max(24px, env(safe-area-inset-top))
+        max(24px, env(safe-area-inset-right))
+        max(28px, env(safe-area-inset-bottom))
+        max(24px, env(safe-area-inset-left));
+      background: transparent;
+      opacity: 1;
+      transition: opacity 1100ms cubic-bezier(.22,.61,.36,1);
+      isolation: isolate;
+    }
+    #intro.leaving { opacity: 0; pointer-events: none; z-index: 0; }
+
+    .cloud-field,
+    #rainVisual {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .cloud-field { z-index: -3; }
+    #rainVisual { z-index: -1; opacity: .78; }
+
+    .cloud {
+      position: absolute;
+      width: 32vw;
+      min-width: 300px;
+      max-width: 620px;
+      aspect-ratio: 2.25 / 1;
+      border-radius: 50%;
+      background: rgba(213, 220, 223, .14);
+      filter: blur(28px);
+      opacity: .9;
+      will-change: transform;
+      animation: cloudDrift linear infinite alternate;
+    }
+    .cloud::before,
+    .cloud::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: inherit;
+    }
+    .cloud::before { width: 58%; height: 92%; left: 6%; top: -24%; }
+    .cloud::after { width: 48%; height: 82%; right: 8%; top: -14%; }
+    .cloud.c1 { left: -10vw; top: 8%; animation-duration: 78s; }
+    .cloud.c2 { right: -8vw; top: 24%; opacity: .66; animation-duration: 96s; animation-delay: -32s; }
+    .cloud.c3 { left: 18vw; top: 58%; opacity: .48; animation-duration: 112s; animation-delay: -61s; }
+    .cloud.c4 { right: 14vw; top: 73%; opacity: .38; animation-duration: 124s; animation-delay: -18s; }
+    @keyframes cloudDrift {
+      from { transform: translate3d(-4vw, 0, 0) scale(1); }
+      to   { transform: translate3d(8vw, 1.5vh, 0) scale(1.04); }
+    }
+
+    .rain-drop {
+      position: absolute;
+      top: -14vh;
+      width: 1px;
+      height: var(--len, 16px);
+      background: rgba(232, 239, 242, var(--alpha, .16));
+      transform: translate3d(0, -10vh, 0) rotate(5deg);
+      will-change: transform;
+      animation: rainFall var(--dur, 2.4s) linear infinite;
+      animation-delay: var(--delay, 0s);
+    }
+    @keyframes rainFall {
+      to { transform: translate3d(4vw, 124vh, 0) rotate(5deg); }
+    }
+
+    #soundPrompt {
+      position: absolute;
+      left: 50%;
+      top: 62%;
+      transform: translate(-50%, -50%);
+      border: 0;
+      background: transparent;
+      color: rgba(239, 242, 242, .58);
+      padding: 18px 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: .02em;
+      text-transform: lowercase;
+      transition: opacity 650ms ease;
+      z-index: 6;
+    }
+    #soundPrompt.fading { opacity: 0; pointer-events: none; }
+    #soundPrompt:hover { color: rgba(246, 248, 248, .72); }
+
+    #introCopy {
+      position: relative;
+      z-index: 2;
+      width: min(86vw, 540px);
+      max-width: 100%;
+      text-align: center;
+      color: rgba(246, 247, 246, .88);
+      transform: translateY(1vh);
+      pointer-events: none;
+    }
+    .reveal {
+      opacity: 0;
+      transform: translateY(7px);
+      transition: opacity 950ms ease, transform 1200ms cubic-bezier(.22,.61,.36,1);
+    }
+    .reveal.shown { opacity: 1; transform: translateY(0); }
+    #softrotTitle {
+      margin: 0 0 28px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(46px, 8vw, 68px);
+      line-height: .98;
+      font-weight: 400;
+      letter-spacing: -.025em;
+    }
+    #manifesto {
+      margin: 0 auto;
+      font-size: clamp(14px, 2.5vw, 16px);
+      line-height: 1.65;
+      color: rgba(244, 246, 246, .72);
+    }
+    #scrollLine {
+      margin: 20px auto 0;
+      font-size: clamp(14px, 2.5vw, 16px);
+      line-height: 1.6;
+      color: rgba(244, 246, 246, .68);
+    }
+
+    #tagline {
+      margin: 25px auto 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(15px, 2.7vw, 17px);
+      line-height: 1.55;
+      font-style: italic;
+      color: rgba(244, 246, 246, .56);
+    }
+    #enterButton {
+      margin: 24px auto 0;
+      min-width: 58px;
+      min-height: 54px;
+      display: inline-grid;
+      place-items: center;
+      border: 0;
+      background: transparent;
+      color: rgba(246, 247, 246, .72);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 34px;
+      font-weight: 400;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: none;
+    }
+    #enterButton.shown { pointer-events: auto; }
+    #enterButton .arrow-glyph { display: inline-block; transition: transform 350ms ease, color 350ms ease; }
+    #enterButton:hover .arrow-glyph { transform: translateX(5px); color: rgba(255,255,255,.9); }
+
+    @media (max-width: 560px) {
+      #introCopy { transform: translateY(-1vh); }
+      #softrotTitle { margin-bottom: 24px; }
+      #tagline { margin-top: 22px; }
+      #enterButton { margin-top: 18px; }
+    }
+
+
+    @media (pointer: coarse), (max-width: 560px), (max-width: 960px) and (orientation: landscape) {
+      #rainToggle, #autoplayToggle { min-width: 44px; min-height: 44px; }
+      body.feed-live #rainToggle, body.feed-live #autoplayToggle { opacity: .38; }
+      body.feed-live.controls-awake #rainToggle, body.feed-live.controls-awake #autoplayToggle { opacity: .7; }
+    }
+    @media (max-width: 960px) and (max-height: 500px) and (orientation: landscape) {
+      #introCopy { transform: none; }
+      #softrotTitle { font-size: 36px; margin-bottom: 10px; }
+      #manifesto, #scrollLine { font-size: 14px; line-height: 1.4; }
+      #scrollLine { margin-top: 8px; }
+      #tagline { font-size: 15px; margin-top: 8px; line-height: 1.4; }
+      #enterButton { margin-top: 10px; min-height: 44px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cloud, .rain-drop { animation: none !important; }
+      .reveal, #intro, #soundPrompt, #enterButton .arrow-glyph { transition-duration: 0.01ms !important; }
+      #feed { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div id="atmosphere" aria-hidden="true">
+    <div class="cloud-field">
+      <div class="cloud c1"></div>
+      <div class="cloud c2"></div>
+      <div class="cloud c3"></div>
+      <div class="cloud c4"></div>
+    </div>
+    <div id="rainVisual"></div>
+  </div>
+
+  <main id="app" aria-label="Softrot video feed">
+    <div id="feed" aria-live="off">
+      <section class="video-slide">
+        <div class="phone">
+          <div class="player-host" id="player-a"></div>
+        </div>
+      </section>
+      <section class="video-slide">
+        <div class="phone">
+          <div class="player-host" id="player-b"></div>
+        </div>
+      </section>
+      <section class="video-slide">
+        <div class="phone">
+          <div class="player-host" id="player-c"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <section id="intro" aria-label="Softrot introduction">
+    <button id="soundPrompt" type="button">press anywhere to begin</button>
+
+    <div id="introCopy">
+      <h1 id="softrotTitle" class="reveal">Softrot</h1>
+      <p id="manifesto" class="reveal">No outrage. No optimization.</p>
+      <p id="scrollLine" class="reveal">Satisfy the urge to scroll<br>without being pulled anywhere.</p>
+      <p id="tagline" class="reveal">Gentle brainrot from the forgotten corners of the internet.</p>
+      <button id="enterButton" class="reveal" type="button" aria-label="Enter Softrot"><span class="arrow-glyph">→</span></button>
+    </div>
+
+    <audio id="introMusic" src="aquatic-ambience.mp3" preload="auto" loop></audio>
+    <audio id="introRain" src="rain.mp3" preload="auto" loop></audio>
+  </section>
+
+  <div id="message"></div>
+  <button id="rainToggle" type="button" aria-pressed="true" title="Rain (R)">rain on</button>
+  <button id="autoplayToggle" type="button" aria-pressed="true" title="Autoplay 15s (A)">auto 15s</button>
+
+  <script type="module">
+    import { getCandidates } from './discovery.js';
+
+    const WATCH_MS = 15000;
+    const PROGRAMMATIC_SCROLL_MS = 650;
+    const SCROLL_IDLE_MS = 90;
+    const SNAP_EPSILON = 0.035;
+
+    const app = document.querySelector('#app');
+    const feed = document.querySelector('#feed');
+    const intro = document.querySelector('#intro');
+    const soundPrompt = document.querySelector('#soundPrompt');
+    const softrotTitle = document.querySelector('#softrotTitle');
+    const manifesto = document.querySelector('#manifesto');
+    const scrollLine = document.querySelector('#scrollLine');
+    const tagline = document.querySelector('#tagline');
+    const enterButton = document.querySelector('#enterButton');
+    const introMusic = document.querySelector('#introMusic');
+    const introRain = document.querySelector('#introRain');
+    const rainVisual = document.querySelector('#rainVisual');
+    const messageEl = document.querySelector('#message');
+    const autoplayToggle = document.querySelector('#autoplayToggle');
+    const rainToggle = document.querySelector('#rainToggle');
+
+    let candidates = [];
+    let currentIndex = -1;
+    let nextIndex = -1;
+    const backStack = [];
+    const recentIndices = [];
+    const RECENT_LIMIT = 18;
+    let feedEnabled = false;
+    let introSoundStarted = false;
+    let entering = false;
+    let programmatic = false;
+    let recycling = false;
+    let scrolling = false;
+    let scrollTimer = null;
+    let recycleUnlockTimer = null;
+    let watchTimer = null;
+    let autoplayEnabled = true;
+    let rainEnabled = true;
+    let queuedDirection = 0;
+    let queuedDirectionTimer = null;
+    let controlsSleepTimer = null;
+    let watchedMs = 0;
+    let lastWatchTickAt = 0;
+    const badIds = new Set();
+    const badIdRecords = {};
+    const BAD_IDS_STORAGE_KEY = '0views.bad-videos.v1';
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    const slots = [...document.querySelectorAll('.video-slide')].map((el) => ({
+      el,
+      host: el.querySelector('.player-host'),
+      player: null,
+      ready: false,
+      item: null,
+      position: -1,
+      loadedForPlay: false,
+      randomStartApplied: false,
+      randomStartSeconds: null,
+      randomProbeTimer: null,
+      audibleTimers: [],
+    }));
+
+    function badIdTtlMs(code) {
+      // Removal/private/embed-denied errors are worth remembering longer.
+      // HTML5/unknown failures can be transient, so let them expire quickly.
+      return [100, 101, 150].includes(Number(code)) ? 30 * DAY_MS : DAY_MS;
+    }
+
+    function loadBadIdRecords() {
+      try {
+        const raw = localStorage.getItem(BAD_IDS_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return;
+        const now = Date.now();
+        let changed = false;
+        for (const [id, record] of Object.entries(parsed)) {
+          const code = Number(record?.code || 0);
+          const timestamp = Number(record?.timestamp || 0);
+          if (!/^[A-Za-z0-9_-]{11}$/.test(id) || !timestamp || now - timestamp > badIdTtlMs(code)) {
+            changed = true;
+            continue;
+          }
+          badIdRecords[id] = { code, timestamp };
+          badIds.add(id);
+        }
+        if (changed) localStorage.setItem(BAD_IDS_STORAGE_KEY, JSON.stringify(badIdRecords));
+      } catch (_) {}
+    }
+
+    function rememberBadId(id, code) {
+      if (!id) return;
+      badIds.add(id);
+      badIdRecords[id] = { code: Number(code || 0), timestamp: Date.now() };
+      try {
+        localStorage.setItem(BAD_IDS_STORAGE_KEY, JSON.stringify(badIdRecords));
+      } catch (_) {}
+    }
+
+    function randomUnit() {
+      if (globalThis.crypto?.getRandomValues) {
+        const a = new Uint32Array(1);
+        crypto.getRandomValues(a);
+        return a[0] / 4294967296;
+      }
+      return Math.random();
+    }
+
+    function randomInt(maxExclusive) {
+      return maxExclusive > 0 ? Math.floor(randomUnit() * maxExclusive) : 0;
+    }
+
+    function shuffle(array) {
+      const out = [...array];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = randomInt(i + 1);
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    }
+
+    function wrap(n) {
+      if (!candidates.length) return 0;
+      return (n % candidates.length + candidates.length) % candidates.length;
+    }
+
+    function rememberRecent(index) {
+      if (index < 0) return;
+      const at = recentIndices.indexOf(index);
+      if (at >= 0) recentIndices.splice(at, 1);
+      recentIndices.push(index);
+      if (recentIndices.length > RECENT_LIMIT) recentIndices.splice(0, recentIndices.length - RECENT_LIMIT);
+    }
+
+    function pickRandomGoodIndex(exclude = []) {
+      if (!candidates.length) return -1;
+      const excluded = new Set(exclude.filter(i => i >= 0));
+      const recent = new Set(recentIndices);
+
+      // Prefer genuinely fresh choices. Random probing avoids creating a hidden
+      // sequential order in the pool.
+      const attempts = Math.max(40, Math.min(300, candidates.length * 2));
+      for (let i = 0; i < attempts; i++) {
+        const idx = randomInt(candidates.length);
+        const item = candidates[idx];
+        if (item && !badIds.has(item.id) && !excluded.has(idx) && !recent.has(idx)) return idx;
+      }
+
+      // If the recent window covers too much of a small surviving pool, allow an
+      // older repeat but still never choose a known-dead or explicitly excluded ID.
+      const viable = [];
+      for (let idx = 0; idx < candidates.length; idx++) {
+        const item = candidates[idx];
+        if (item && !badIds.has(item.id) && !excluded.has(idx)) viable.push(idx);
+      }
+      return viable.length ? viable[randomInt(viable.length)] : -1;
+    }
+
+
+    function viewportHeight() { return feed.clientHeight || window.innerHeight || 1; }
+    function currentSlot() { return slots[1]; }
+
+    function showFatal(text) {
+      messageEl.textContent = text;
+      messageEl.style.display = 'grid';
+      intro.style.display = 'none';
+    }
+
+    function clearAudibleTimers(slot) {
+      for (const timer of slot.audibleTimers || []) clearTimeout(timer);
+      slot.audibleTimers = [];
+    }
+
+    function resetSlotPlayback(slot) {
+      slot.preloadEpoch = (slot.preloadEpoch || 0) + 1;
+      slot.preloadReady = false;
+      slot.preloadFramePending = false;
+      slot.loadedForPlay = false;
+      slot.randomStartApplied = false;
+      slot.randomStartSeconds = null;
+      if (slot.randomProbeTimer) clearTimeout(slot.randomProbeTimer);
+      slot.randomProbeTimer = null;
+      clearAudibleTimers(slot);
+    }
+
+    function assignSlot(slot, index) {
+      if (index < 0 || !candidates.length) return;
+      slot.position = wrap(index);
+      slot.item = candidates[slot.position];
+      resetSlotPlayback(slot);
+      if (!slot.ready || !slot.player || !slot.item) return;
+      try {
+        slot.player.mute();
+        slot.player.cueVideoById({ videoId: slot.item.id });
+      } catch (_) {}
+    }
+
+    function assignAroundCurrent() {
+      if (currentIndex < 0) return;
+      const previous = backStack.length ? backStack[backStack.length - 1] : currentIndex;
+      if (nextIndex < 0 || !candidates[nextIndex] || badIds.has(candidates[nextIndex].id) || nextIndex === currentIndex) {
+        nextIndex = pickRandomGoodIndex([currentIndex, previous]);
+      }
+      assignSlot(slots[0], previous);
+      assignSlot(slots[1], currentIndex);
+      if (nextIndex >= 0) assignSlot(slots[2], nextIndex);
+    }
+
+    function setIframePolicy(slot) {
+      try {
+        const iframe = slot.player.getIframe();
+        iframe.setAttribute('allow', 'autoplay; encrypted-media');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      } catch (_) {}
+    }
+
+    function addWatchTimeThrough(now = performance.now()) {
+      if (!lastWatchTickAt) {
+        lastWatchTickAt = now;
+        return;
+      }
+
+      const elapsed = Math.max(0, now - lastWatchTickAt);
+      lastWatchTickAt = now;
+
+      if (!autoplayEnabled || !feedEnabled || programmatic || scrolling) return;
+      const slot = currentSlot();
+      if (!slot?.player || !slot.ready) return;
+
+      try {
+        if (slot.player.getPlayerState() === YT.PlayerState.PLAYING) {
+          watchedMs = Math.min(WATCH_MS, watchedMs + elapsed);
+        }
+      } catch (_) {}
+    }
+
+    function clearWatchTimer({ subtract = false } = {}) {
+      if (subtract && lastWatchTickAt) addWatchTimeThrough();
+      lastWatchTickAt = 0;
+      if (watchTimer) clearInterval(watchTimer);
+      watchTimer = null;
+    }
+
+    function resetWatchTimer() {
+      clearWatchTimer({ subtract: true });
+      watchedMs = 0;
+      lastWatchTickAt = 0;
+    }
+
+    function startWatchTimer({ fresh = false } = {}) {
+      if (fresh) resetWatchTimer();
+      if (!autoplayEnabled || !feedEnabled || programmatic || scrolling) return;
+      if (watchTimer) return;
+
+      const slot = currentSlot();
+      if (!slot?.player || !slot.ready) return;
+      try {
+        if (slot.player.getPlayerState() !== YT.PlayerState.PLAYING) return;
+      } catch (_) { return; }
+
+      if (watchedMs >= WATCH_MS) {
+        watchedMs = WATCH_MS;
+        programmaticMove(1);
+        return;
+      }
+
+      lastWatchTickAt = performance.now();
+      watchTimer = setInterval(() => {
+        if (!autoplayEnabled || !feedEnabled) {
+          clearWatchTimer({ subtract: true });
+          return;
+        }
+
+        addWatchTimeThrough();
+        if (watchedMs < WATCH_MS) return;
+
+        clearWatchTimer();
+        watchedMs = WATCH_MS;
+        programmaticMove(1);
+      }, 100);
+    }
+
+    function wakeControls() {
+      if (!feedEnabled) return;
+      document.body.classList.add('controls-awake');
+      clearTimeout(controlsSleepTimer);
+      controlsSleepTimer = setTimeout(() => {
+        document.body.classList.remove('controls-awake');
+      }, 3200);
+    }
+
+    function setAutoplayEnabled(enabled) {
+      autoplayEnabled = Boolean(enabled);
+      autoplayToggle.setAttribute('aria-pressed', autoplayEnabled ? 'true' : 'false');
+      autoplayToggle.setAttribute('aria-label', autoplayEnabled ? 'Autoplay on, 15 seconds. Press A to turn off.' : 'Autoplay off. Press A to turn on.');
+      autoplayToggle.textContent = autoplayEnabled ? 'auto 15s' : 'auto off';
+
+      if (autoplayEnabled) {
+        resetWatchTimer();
+        if (feedEnabled && !scrolling && !programmatic) startWatchTimer();
+      } else {
+        clearWatchTimer();
+      }
+    }
+
+    autoplayToggle.addEventListener('click', () => {
+      wakeControls();
+      setAutoplayEnabled(!autoplayEnabled);
+    });
+
+    function setRainEnabled(enabled) {
+      rainEnabled = Boolean(enabled);
+      rainToggle.setAttribute('aria-pressed', rainEnabled ? 'true' : 'false');
+      rainToggle.setAttribute('aria-label', rainEnabled ? 'Rain on. Press R to turn off.' : 'Rain off. Press R to turn on.');
+      rainToggle.textContent = rainEnabled ? 'rain on' : 'rain off';
+
+      if (rainEnabled) {
+        try {
+          introRain.loop = true;
+          const result = introRain.play();
+          if (result && typeof result.catch === 'function') result.catch(() => {});
+          fadeAudio(introRain, feedEnabled ? 0.075 : 0.13, 450);
+        } catch (_) {}
+      } else {
+        fadeAudio(introRain, 0, 350);
+        setTimeout(() => {
+          if (!rainEnabled) {
+            try { introRain.pause(); } catch (_) {}
+          }
+        }, 380);
+      }
+    }
+
+    rainToggle.addEventListener('click', () => {
+      wakeControls();
+      setRainEnabled(!rainEnabled);
+    });
+
+    function pauseCurrentForScroll() {
+      const slot = currentSlot();
+      if (!slot?.player || !slot.ready) return;
+      clearWatchTimer({ subtract: true });
+      try {
+        slot.player.mute();
+        slot.player.pauseVideo();
+      } catch (_) {}
+    }
+
+    function chooseRandomStart(slot, { seek = true } = {}) {
+      if (!slot?.player || slot.randomStartApplied) return true;
+      const duration = Number(slot.player.getDuration?.() || 0);
+      if (!Number.isFinite(duration) || duration <= 0) return false;
+
+      // Leave enough room for the configured watch window. Very short clips
+      // necessarily start at 0; longer clips genuinely start at a random point.
+      const safety = 1;
+      const maxStart = Math.max(0, Math.floor(duration - WATCH_MS / 1000 - safety));
+      const startAt = maxStart > 0 ? randomInt(maxStart + 1) : 0;
+      slot.randomStartSeconds = startAt;
+      slot.randomStartApplied = true;
+      if (seek) {
+        try {
+          if (startAt > 0) slot.player.seekTo(startAt, true);
+        } catch (_) {}
+      }
+      return true;
+    }
+
+    function forceAudible(slot) {
+      if (!feedEnabled || slot !== currentSlot() || !slot?.player) return;
+      try {
+        slot.player.setVolume(100);
+        slot.player.unMute();
+        slot.player.playVideo();
+      } catch (_) {}
+    }
+
+    function enforceAudible(slot) {
+      if (!slot) return;
+      clearAudibleTimers(slot);
+      for (const delay of [0, 120, 360, 800, 1500]) {
+        slot.audibleTimers.push(setTimeout(() => forceAudible(slot), delay));
+      }
+    }
+
+    function finishStartingCurrent(slot) {
+      if (!feedEnabled || slot !== currentSlot() || !slot.player) return;
+      enforceAudible(slot);
+      if (!scrolling && !programmatic) startWatchTimer();
+    }
+
+    function ensureRandomStart(slot, attempt = 0) {
+      if (!feedEnabled || slot !== currentSlot() || !slot.player) return;
+      if (chooseRandomStart(slot)) {
+        // A seek does not reliably cause a second PLAYING event in Firefox.
+        // Always use a short fallback to restore sound on the active player.
+        if (slot.randomProbeTimer) clearTimeout(slot.randomProbeTimer);
+        const wait = (slot.randomStartSeconds || 0) > 0 ? 360 : 40;
+        slot.randomProbeTimer = setTimeout(() => {
+          slot.randomProbeTimer = null;
+          finishStartingCurrent(slot);
+        }, wait);
+        return;
+      }
+      if (attempt >= 30) {
+        slot.randomStartApplied = true;
+        slot.randomStartSeconds = 0;
+        finishStartingCurrent(slot);
+        return;
+      }
+      try { slot.player.mute(); } catch (_) {}
+      slot.randomProbeTimer = setTimeout(() => ensureRandomStart(slot, attempt + 1), 100);
+    }
+
+    // Prepare the next clip before its visible handoff.
+    function prepareNextFrame() {
+      const slot = slots[2];
+      if (!feedEnabled || !slot?.ready || !slot.player || !slot.item || slot.loadedForPlay) return;
+      try {
+        // Cue metadata may still belong to the previous assignment.
+        if (slot.player.getPlayerState() !== YT.PlayerState.CUED ||
+            slot.player.getVideoData()?.video_id !== slot.item.id) return;
+        if (!chooseRandomStart(slot, { seek: false })) return;
+        slot.loadedForPlay = true;
+        slot.player.mute();
+        slot.player.loadVideoById({videoId:slot.item.id,startSeconds:slot.randomStartSeconds || 0});
+      } catch (_) {}
+    }
+
+    function settleNextFrame(slot) {
+      if (slot.preloadReady || slot.preloadFramePending) return;
+      slot.preloadFramePending = true;
+      const epoch = slot.preloadEpoch;
+      // PLAYING is the best available iframe API signal; it does not guarantee a painted frame.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (slot !== slots[2] || slot.preloadEpoch !== epoch) return;
+        slot.preloadFramePending = false;
+        try {
+          if (slot.player.getPlayerState() !== YT.PlayerState.PLAYING) return;
+          slot.player.mute();
+          slot.player.pauseVideo();
+        } catch (_) {}
+      }));
+    }
+
+    function startCurrent() {
+      prepareNextFrame();
+      if (!feedEnabled) return;
+      const slot = currentSlot();
+      if (!slot?.player || !slot.ready || !slot.item) return;
+
+      try {
+        slot.player.setVolume(100);
+
+        if (slot.loadedForPlay) {
+          enforceAudible(slot);
+          if (!scrolling && !programmatic) startWatchTimer();
+          return;
+        }
+
+        // Neighboring videos are already cued, so duration metadata is often
+        // available before they become current. In that common case we can
+        // choose the random point *before* playback and start there directly,
+        // avoiding the mute -> play -> seek -> unmute race in Firefox.
+        const hasRandomStart = chooseRandomStart(slot, { seek: false });
+        slot.loadedForPlay = true;
+
+        if (hasRandomStart) {
+          slot.player.unMute();
+          slot.player.loadVideoById({
+            videoId: slot.item.id,
+            startSeconds: slot.randomStartSeconds || 0,
+          });
+          enforceAudible(slot);
+        } else {
+          // Metadata was not ready yet. Start muted only long enough to obtain
+          // duration, then the PLAYING handler seeks and force-restores sound.
+          slot.player.mute();
+          slot.player.loadVideoById({ videoId: slot.item.id });
+        }
+      } catch (_) {}
+    }
+
+    function muteNonCurrent() {
+      for (const slot of slots) {
+        if (slot === currentSlot() || !slot.player || !slot.ready) continue;
+        try { slot.player.mute(); slot.player.pauseVideo(); } catch (_) {}
+      }
+    }
+
+    function centerFeedInstantly({ settle = false } = {}) {
+      recycling = true;
+      clearTimeout(recycleUnlockTimer);
+      const center = () => { feed.scrollTop = viewportHeight(); };
+      center();
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!settle) {
+          recycling = false;
+          return;
+        }
+
+        // Native trackpad scrolling can still have momentum after scroll-snap fires.
+        // Re-centre once after that tail has died instead of letting it trigger a
+        // second navigation. The user still sees one continuous native snap.
+        recycleUnlockTimer = setTimeout(() => {
+          center();
+          requestAnimationFrame(() => { recycling = false; });
+        }, 160);
+      }));
+    }
+
+    function markBad(slot, errorCode = 0) {
+      if (!slot?.item) return;
+      rememberBadId(slot.item.id, errorCode);
+      const badIndex = slot.position;
+      const role = slots.indexOf(slot);
+
+      // Purge dead entries from navigation history as soon as we learn about them.
+      for (let i = backStack.length - 1; i >= 0; i--) {
+        if (backStack[i] === badIndex) backStack.splice(i, 1);
+      }
+
+      if (role === 1 || badIndex === currentIndex) {
+        resetWatchTimer();
+        // Only the visible player is replaced here. Neighbour failures must never
+        // re-cue the current video; doing that was one source of playback resets.
+        currentIndex = pickRandomGoodIndex([badIndex, ...backStack.slice(-2)]);
+        if (currentIndex < 0) {
+          showFatal('No playable candidates remain in this local pool.');
+          return;
+        }
+
+        rememberRecent(currentIndex);
+        const previous = backStack.length ? backStack[backStack.length - 1] : currentIndex;
+        nextIndex = pickRandomGoodIndex([currentIndex, previous, badIndex]);
+
+        assignSlot(slots[0], previous);
+        assignSlot(slots[1], currentIndex);
+        if (nextIndex >= 0) assignSlot(slots[2], nextIndex);
+
+        centerFeedInstantly({ settle: true });
+        muteNonCurrent();
+        requestAnimationFrame(() => requestAnimationFrame(startCurrent));
+      } else if (role === 0) {
+        // A dead history/preload slot should not disturb the playing centre slot.
+        const previous = backStack.length ? backStack[backStack.length - 1] : currentIndex;
+        assignSlot(slot, previous);
+      } else if (role === 2) {
+        // Replace only the bad preloaded next video.
+        nextIndex = pickRandomGoodIndex([currentIndex, ...backStack.slice(-2), badIndex]);
+        if (nextIndex >= 0) assignSlot(slot, nextIndex);
+      }
+    }
+
+    function commitDirection(direction) {
+      if (!direction || !candidates.length) return;
+      recycling = true;
+      clearWatchTimer();
+      scrolling = false;
+
+      if (direction > 0) {
+        // Restore the smooth three-panel recycling used by the earlier build.
+        // The lower player that was already visible/pre-cued becomes the centre
+        // player without being destroyed or re-cued.
+        backStack.push(currentIndex);
+        if (backStack.length > 200) backStack.shift();
+
+        const recycled = slots.shift();
+        slots.push(recycled);
+        // Keep iframes connected: DOM moves reload them and lose API error events.
+        slots.forEach((slot, index) => { slot.el.style.order = index; });
+
+        currentIndex = slots[1].position;
+        if (currentIndex < 0 || !candidates[currentIndex] || badIds.has(candidates[currentIndex].id)) {
+          currentIndex = pickRandomGoodIndex([...backStack.slice(-2)]);
+          if (currentIndex < 0) {
+            showFatal('No playable candidates remain in this local pool.');
+            return;
+          }
+          assignSlot(slots[1], currentIndex);
+        }
+
+        rememberRecent(currentIndex);
+        nextIndex = pickRandomGoodIndex([currentIndex, ...backStack.slice(-2)]);
+        if (nextIndex >= 0) assignSlot(slots[2], nextIndex);
+      } else {
+        // Up is actual history. The video we leave is deliberately not retained
+        // as the next video: going down again branches to a new random choice.
+        if (!backStack.length) {
+          resetWatchTimer();
+          centerFeedInstantly({ settle: true });
+          requestAnimationFrame(() => requestAnimationFrame(startCurrent));
+          return;
+        }
+
+        const discardedForward = currentIndex;
+        const expectedPrevious = backStack.pop();
+
+        const recycled = slots.pop();
+        slots.unshift(recycled);
+        slots.forEach((slot, index) => { slot.el.style.order = index; });
+
+        currentIndex = slots[1].position;
+        if (currentIndex !== expectedPrevious) {
+          currentIndex = expectedPrevious;
+          assignSlot(slots[1], currentIndex);
+        }
+
+        rememberRecent(discardedForward);
+
+        const olderPrevious = backStack.length ? backStack[backStack.length - 1] : currentIndex;
+        assignSlot(slots[0], olderPrevious);
+
+        nextIndex = pickRandomGoodIndex([
+          currentIndex,
+          discardedForward,
+          olderPrevious,
+          ...backStack.slice(-2),
+        ]);
+        if (nextIndex >= 0) assignSlot(slots[2], nextIndex);
+      }
+
+      resetWatchTimer();
+
+      // Re-centering after recycling the player roles kills residual trackpad
+      // momentum, preventing one gesture from accidentally advancing 2–3 videos.
+      centerFeedInstantly({ settle: true });
+      muteNonCurrent();
+
+      // The new centre slot was already cued before the transition, so playback
+      // starts without rebuilding all three YouTube players.
+      requestAnimationFrame(() => requestAnimationFrame(startCurrent));
+      setTimeout(() => {
+        if (autoplayEnabled && feedEnabled && !scrolling && !programmatic) {
+          startWatchTimer();
+        }
+      }, 260);
+    }
+
+    function easeInOut(t) {
+      return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function animateScrollTo(to, duration, done) {
+      const from = feed.scrollTop;
+      const started = performance.now();
+      programmatic = true;
+      function frame(now) {
+        const t = Math.min(1, (now - started) / duration);
+        feed.scrollTop = from + (to - from) * easeInOut(t);
+        if (t < 1) return requestAnimationFrame(frame);
+        programmatic = false;
+        done?.();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function onManualSnapFinished() {
+      if (!feedEnabled || programmatic || recycling) return;
+
+      const h = viewportHeight();
+      const ratio = feed.scrollTop / h;
+      const nearest = Math.max(0, Math.min(2, Math.round(ratio)));
+
+      // Let the browser finish its own native snap. This avoids the old
+      // "stop at 3/4, then animate the rest" feeling: there is no second
+      // custom scroll animation here.
+      if (Math.abs(ratio - nearest) > SNAP_EPSILON) {
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(onManualSnapFinished, 70);
+        return;
+      }
+
+      scrolling = false;
+      if (nearest === 2) {
+        commitDirection(1);
+      } else if (nearest === 0) {
+        commitDirection(-1);
+      } else {
+        // Same video won the snap. Make sure it is audible and restart only
+        // the remaining portion of the 15-second viewing timer.
+        enforceAudible(currentSlot());
+        if (autoplayEnabled) startWatchTimer();
+      }
+    }
+
+    function drainQueuedDirection() {
+      clearTimeout(queuedDirectionTimer);
+      queuedDirectionTimer = null;
+
+      if (!queuedDirection || !feedEnabled) return;
+      if (programmatic || recycling || scrolling) {
+        queuedDirectionTimer = setTimeout(drainQueuedDirection, 45);
+        return;
+      }
+
+      const direction = queuedDirection;
+      queuedDirection = 0;
+      programmaticMove(direction);
+    }
+
+    function programmaticMove(direction) {
+      if (!feedEnabled || !direction) return;
+
+      if (programmatic || recycling || scrolling) {
+        // Keep the latest key intent instead of silently dropping it.
+        queuedDirection = direction;
+        if (!queuedDirectionTimer) {
+          queuedDirectionTimer = setTimeout(drainQueuedDirection, 45);
+        }
+        return;
+      }
+
+      // Keep the current panel until the forward player has played and paused offscreen.
+      if (direction > 0 && !slots[2].preloadReady) {
+        prepareNextFrame();
+        queuedDirection = direction;
+        if (!queuedDirectionTimer) queuedDirectionTimer = setTimeout(drainQueuedDirection,45);
+        return;
+      }
+      queuedDirection = 0;
+      scrolling = true;
+      clearWatchTimer({ subtract: true });
+      const h = viewportHeight();
+      const target = direction > 0 ? h * 2 : 0;
+      animateScrollTo(target, PROGRAMMATIC_SCROLL_MS, () => {
+        commitDirection(direction);
+        if (queuedDirection && !queuedDirectionTimer) {
+          queuedDirectionTimer = setTimeout(drainQueuedDirection, 45);
+        }
+      });
+    }
+
+    feed.addEventListener('scroll', () => {
+      if (!feedEnabled || programmatic || recycling) return;
+
+      if (!scrolling) {
+        scrolling = true;
+        clearWatchTimer({ subtract: true });
+      }
+
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(onManualSnapFinished, SCROLL_IDLE_MS);
+    }, { passive: true });
+
+    // Modern Firefox fires scrollend after native scroll-snap settles. Keep the
+    // idle fallback above for browsers that do not expose it.
+    feed.addEventListener('scrollend', () => {
+      if (!feedEnabled || programmatic || recycling) return;
+      clearTimeout(scrollTimer);
+      onManualSnapFinished();
+    });
+
+    document.addEventListener('pointermove', wakeControls, { passive: true });
+    document.addEventListener('touchstart', wakeControls, { passive: true });
+
+    document.addEventListener('keydown', (event) => {
+      if (!feedEnabled) return;
+      wakeControls();
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        programmaticMove(1);
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        programmaticMove(-1);
+      } else if (event.key === 'a' || event.key === 'A') {
+        event.preventDefault();
+        setAutoplayEnabled(!autoplayEnabled);
+      } else if (event.key === 'r' || event.key === 'R') {
+        event.preventDefault();
+        setRainEnabled(!rainEnabled);
+      } else if (event.key === ' ') {
+        event.preventDefault();
+        const slot = currentSlot();
+        if (!slot?.player) return;
+        const state = slot.player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) {
+          clearAudibleTimers(slot);
+          clearTimeout(slot.randomProbeTimer);
+          slot.randomProbeTimer = null;
+          slot.player.pauseVideo();
+        } else {
+          slot.player.playVideo();
+        }
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      clearTimeout(window.__softrotResizeTimer);
+      window.__softrotResizeTimer = setTimeout(centerFeedInstantly, 120);
+    });
+
+    function onPlayerState(slot, state) {
+      if (slot !== currentSlot()) {
+        if (slot === slots[2] && feedEnabled) {
+          const matches=slot.player.getVideoData()?.video_id===slot.item?.id;
+          if (state === YT.PlayerState.CUED) prepareNextFrame();
+          else if (matches && state === YT.PlayerState.PLAYING && slot.loadedForPlay) settleNextFrame(slot);
+          else if (matches && state === YT.PlayerState.PAUSED && slot.preloadFramePending === false && slot.loadedForPlay) {
+            slot.preloadReady=true;
+          }
+        }
+        return;
+      }
+      const S = YT.PlayerState;
+      if (state === S.PLAYING) {
+        if (!feedEnabled) {
+          try { slot.player.mute(); slot.player.pauseVideo(); } catch (_) {}
+          return;
+        }
+        if (!slot.randomStartApplied) {
+          try { slot.player.mute(); } catch (_) {}
+          ensureRandomStart(slot);
+          return;
+        }
+        finishStartingCurrent(slot);
+      } else if (state === S.PAUSED || state === S.BUFFERING) {
+        clearWatchTimer({ subtract: true });
+      } else if (state === S.ENDED) {
+        if (autoplayEnabled) programmaticMove(1);
+      }
+    }
+
+    window.onYouTubeIframeAPIReady = () => {
+      for (const slot of slots) {
+        slot.player = new YT.Player(slot.host.id, {
+          width: '100%',
+          height: '100%',
+          videoId: slot.item?.id,
+          playerVars: {
+            autoplay: 0,
+            controls: 1,
+            disablekb: 0,
+            fs: 1,
+            playsinline: 1,
+            rel: 1,
+            origin: location.origin,
+          },
+          events: {
+            onReady: () => {
+              slot.ready = true;
+              setIframePolicy(slot);
+              if (slot.item) assignSlot(slot, slot.position);
+              try { slot.player.mute(); } catch (_) {}
+              if (feedEnabled && slot === currentSlot()) startCurrent();
+            },
+            onStateChange: (event) => onPlayerState(slot, event.data),
+            onError: (event) => markBad(slot, event.data),
+          },
+        });
+      }
+    };
+
+    function makeRain() {
+      const count = 42;
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < count; i++) {
+        const drop = document.createElement('i');
+        drop.className = 'rain-drop';
+        drop.style.left = `${randomUnit() * 104 - 2}%`;
+        drop.style.setProperty('--len', `${8 + randomUnit() * 18}px`);
+        drop.style.setProperty('--dur', `${2.05 + randomUnit() * 1.8}s`);
+        drop.style.setProperty('--delay', `${-randomUnit() * 4}s`);
+        drop.style.setProperty('--alpha', `${0.08 + randomUnit() * 0.13}`);
+        fragment.appendChild(drop);
+      }
+      rainVisual.appendChild(fragment);
+    }
+
+    function fadeAudio(audio, target, duration) {
+      if (!audio) return;
+      const start = Number(audio.volume || 0);
+      const started = performance.now();
+      function frame(now) {
+        const t = Math.min(1, (now - started) / duration);
+        audio.volume = Math.max(0, Math.min(1, start + (target - start) * t));
+        if (t < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function tryStartAudio(audio, target) {
+      if (!audio) return;
+      try {
+        audio.volume = 0;
+        audio.currentTime = 0;
+        const result = audio.play();
+        if (result && typeof result.then === 'function') {
+          result.then(() => fadeAudio(audio, target, 1800)).catch(() => {});
+        } else {
+          fadeAudio(audio, target, 1800);
+        }
+      } catch (_) {}
+    }
+
+    function revealIntroCopy() {
+      setTimeout(() => softrotTitle.classList.add('shown'), 900);
+      setTimeout(() => manifesto.classList.add('shown'), 2300);
+      setTimeout(() => scrollLine.classList.add('shown'), 4000);
+      setTimeout(() => tagline.classList.add('shown'), 6200);
+      setTimeout(() => enterButton.classList.add('shown'), 8700);
+    }
+
+    intro.addEventListener('click', () => {
+      if (introSoundStarted) return;
+      introSoundStarted = true;
+      soundPrompt.classList.add('fading');
+      setTimeout(() => { soundPrompt.style.display = 'none'; }, 700);
+      tryStartAudio(introMusic, 0.35);
+      if (rainEnabled) tryStartAudio(introRain, 0.13);
+      revealIntroCopy();
+    });
+
+    enterButton.addEventListener('click', () => {
+      if (entering) return;
+      entering = true;
+      feedEnabled = true;
+      document.body.classList.add('feed-live');
+      wakeControls();
+      app.classList.add('entered');
+      intro.classList.add('leaving');
+
+      // Let the ambience disappear, but keep the rain as the quiet bed under the feed.
+      fadeAudio(introMusic, 0, 1100);
+      document.body.appendChild(introRain);
+      introRain.loop = true;
+      if (rainEnabled) {
+        fadeAudio(introRain, 0.075, 1800);
+      } else {
+        try { introRain.pause(); introRain.volume = 0; } catch (_) {}
+      }
+
+      resetWatchTimer();
+      muteNonCurrent();
+      startCurrent();
+      setTimeout(() => {
+        try { introMusic.pause(); introMusic.currentTime = 0; introMusic.volume = 0; } catch (_) {}
+        intro.remove();
+      }, 1250);
+    });
+
+    try {
+      setAutoplayEnabled(true);
+      setRainEnabled(true);
+      makeRain();
+      loadBadIdRecords();
+      const loaded = await getCandidates();
+      // Deduplicate by video ID. The feed uses a three-player recycling window;
+      // every forward branch is still selected independently at random.
+      candidates = [...new Map(loaded.filter(item => item?.id).map(item => [item.id, item])).values()];
+      if (!candidates.length) throw new Error('No valid candidate IDs found.');
+      currentIndex = pickRandomGoodIndex();
+      if (currentIndex < 0) throw new Error('No playable candidates remain in this local pool.');
+      rememberRecent(currentIndex);
+      nextIndex = pickRandomGoodIndex([currentIndex]);
+      assignAroundCurrent();
+      requestAnimationFrame(() => requestAnimationFrame(centerFeedInstantly));
+      const yt = document.createElement('script');
+      yt.src = 'https://www.youtube.com/iframe_api';
+      yt.onerror = () => showFatal('Could not load the YouTube player. Check your connection and reload.');
+      document.head.appendChild(yt);
+    } catch (error) {
+      showFatal(error.message || String(error));
+    }
+  </script>
+</body>
+</html>
