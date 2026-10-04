@@ -405,6 +405,7 @@
     import { getCandidates } from './discovery.js';
 
     const WATCH_MS = 20000;
+    const CURRENT_START_TIMEOUT_MS = 6000;
     const PROGRAMMATIC_SCROLL_MS = 650;
     const SCROLL_IDLE_MS = 90;
     const SNAP_EPSILON = 0.035;
@@ -469,6 +470,8 @@
       randomStartApplied: false,
       randomStartSeconds: null,
       randomProbeTimer: null,
+      activationTimer: null,
+      activationRetries: 0,
       audibleTimers: [],
     }));
 
@@ -584,9 +587,9 @@
     }
 
     function resetSlotPlayback(slot) {
-      slot.preloadEpoch = (slot.preloadEpoch || 0) + 1;
-      slot.preloadReady = false;
-      slot.preloadFramePending = false;
+      clearTimeout(slot.activationTimer);
+      slot.activationTimer = null;
+      slot.activationRetries = 0;
       slot.loadedForPlay = false;
       slot.randomStartApplied = false;
       slot.randomStartSeconds = null;
@@ -808,8 +811,44 @@
 
     function finishStartingCurrent(slot) {
       if (!feedEnabled || slot !== currentSlot() || !slot.player) return;
+      try {
+        if (slot.player.getPlayerState() === YT.PlayerState.PLAYING &&
+            slot.player.getVideoData()?.video_id === slot.item?.id) {
+          clearTimeout(slot.activationTimer);
+          slot.activationTimer = null;
+          slot.activationRetries = 0;
+        }
+      } catch (_) {}
       enforceAudible(slot);
       if (!scrolling && !programmatic) startWatchTimer();
+    }
+
+    function watchCurrentStart(slot) {
+      if (slot.activationTimer) return;
+      const expectedId = slot.item?.id;
+      slot.activationTimer = setTimeout(() => {
+        slot.activationTimer = null;
+        if (!feedEnabled || slot !== currentSlot() || slot.item?.id !== expectedId) return;
+        try {
+          if (slot.player?.getPlayerState() === YT.PlayerState.PLAYING &&
+              slot.player.getVideoData()?.video_id === expectedId) {
+            finishStartingCurrent(slot);
+            return;
+          }
+        } catch (_) {}
+        if (slot.activationRetries === 0) {
+          slot.activationRetries = 1;
+          if (!slot.ready || !hasCurrentPlayer(slot)) {
+            replacePlayer(slot);
+            watchCurrentStart(slot);
+          } else {
+            startCurrent({ forceLoad: true });
+          }
+        } else {
+          // A timeout is not proof that the video is dead; skip without caching it.
+          markBad(slot, null);
+        }
+      }, CURRENT_START_TIMEOUT_MS);
     }
 
     function ensureRandomStart(slot, attempt = 0) {
@@ -835,71 +874,56 @@
       slot.randomProbeTimer = setTimeout(() => ensureRandomStart(slot, attempt + 1), 100);
     }
 
-    // Prepare the next clip before its visible handoff.
-    function prepareNextFrame() {
-      const slot = slots[2];
-      if (!feedEnabled || !slot?.ready || !slot.player || !slot.item || slot.loadedForPlay) return;
-      try {
-        // Cue metadata may still belong to the previous assignment.
-        if (slot.player.getPlayerState() !== YT.PlayerState.CUED ||
-            slot.player.getVideoData()?.video_id !== slot.item.id) return;
-        if (!chooseRandomStart(slot, { seek: false })) return;
-        slot.loadedForPlay = true;
-        slot.player.mute();
-        slot.player.loadVideoById({videoId:slot.item.id,startSeconds:slot.randomStartSeconds || 0});
-      } catch (_) {}
-    }
-
-    function settleNextFrame(slot) {
-      if (slot.preloadReady || slot.preloadFramePending) return;
-      slot.preloadFramePending = true;
-      const epoch = slot.preloadEpoch;
-      // PLAYING is the best available iframe API signal; it does not guarantee a painted frame.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (slot !== slots[2] || slot.preloadEpoch !== epoch) return;
-        slot.preloadFramePending = false;
-        try {
-          if (slot.player.getPlayerState() !== YT.PlayerState.PLAYING) return;
-          slot.player.mute();
-          slot.player.pauseVideo();
-        } catch (_) {}
-      }));
-    }
-
-    function startCurrent() {
-      prepareNextFrame();
+    function startCurrent({ forceLoad = false } = {}) {
       if (!feedEnabled) return;
       const slot = currentSlot();
-      if (!slot?.player || !slot.ready || !slot.item) return;
+      const expected = candidates[currentIndex];
+      if (!slot || !expected) return;
+      if (slot.position !== currentIndex || slot.item?.id !== expected.id) {
+        slot.position = currentIndex;
+        slot.item = expected;
+        resetSlotPlayback(slot);
+      }
+      watchCurrentStart(slot);
+      if (!slot.ready || !hasCurrentPlayer(slot)) return;
 
       try {
         slot.player.setVolume(100);
 
-        if (slot.loadedForPlay) {
+        const loadedId = slot.player.getVideoData?.()?.video_id;
+        const state = slot.player.getPlayerState?.();
+        if (loadedId && loadedId !== expected.id) {
+          slot.loadedForPlay = false;
+          slot.randomStartApplied = false;
+          slot.randomStartSeconds = null;
+        }
+
+        if (slot.loadedForPlay && !forceLoad &&
+            state !== YT.PlayerState.CUED && state !== YT.PlayerState.UNSTARTED) {
           enforceAudible(slot);
           if (!scrolling && !programmatic) startWatchTimer();
           return;
         }
 
-        // Neighboring videos are already cued, so duration metadata is often
-        // available before they become current. In that common case we can
-        // choose the random point *before* playback and start there directly,
-        // avoiding the mute -> play -> seek -> unmute race in Firefox.
-        const hasRandomStart = chooseRandomStart(slot, { seek: false });
-        slot.loadedForPlay = true;
+        // Use duration metadata if the cue exposed it; otherwise begin only
+        // after promotion, then choose the random point on the first PLAYING event.
+        const hasRandomStart = slot.randomStartApplied ||
+          (loadedId === expected.id && chooseRandomStart(slot, { seek: false }));
 
         if (hasRandomStart) {
           slot.player.unMute();
           slot.player.loadVideoById({
-            videoId: slot.item.id,
+            videoId: expected.id,
             startSeconds: slot.randomStartSeconds || 0,
           });
+          slot.loadedForPlay = true;
           enforceAudible(slot);
         } else {
           // Metadata was not ready yet. Start muted only long enough to obtain
           // duration, then the PLAYING handler seeks and force-restores sound.
           slot.player.mute();
-          slot.player.loadVideoById({ videoId: slot.item.id });
+          slot.player.loadVideoById({ videoId: expected.id });
+          slot.loadedForPlay = true;
         }
       } catch (_) {}
     }
@@ -935,7 +959,7 @@
 
     function markBad(slot, errorCode = 0) {
       if (!slot?.item) return;
-      rememberBadId(slot.item.id, errorCode);
+      if (errorCode !== null) rememberBadId(slot.item.id, errorCode);
       const badIndex = slot.position;
       const role = slots.indexOf(slot);
 
@@ -981,6 +1005,12 @@
       recycling = true;
       clearWatchTimer();
       scrolling = false;
+
+      if (direction > 0 || backStack.length) {
+        const departing = currentSlot();
+        clearAudibleTimers(departing);
+        try { departing.player?.mute(); departing.player?.pauseVideo(); } catch (_) {}
+      }
 
       if (direction > 0) {
         // Restore the smooth three-panel recycling used by the earlier build.
@@ -1135,13 +1165,6 @@
         return;
       }
 
-      // Keep the current panel until the forward player has played and paused offscreen.
-      if (direction > 0 && !slots[2].preloadReady) {
-        prepareNextFrame();
-        queuedDirection = direction;
-        if (!queuedDirectionTimer) queuedDirectionTimer = setTimeout(drainQueuedDirection,45);
-        return;
-      }
       queuedDirection = 0;
       scrolling = true;
       clearWatchTimer({ subtract: true });
@@ -1215,19 +1238,13 @@
     });
 
     function onPlayerState(slot, state) {
-      if (slot !== currentSlot()) {
-        if (slot === slots[2] && feedEnabled) {
-          const matches=slot.player.getVideoData()?.video_id===slot.item?.id;
-          if (state === YT.PlayerState.CUED) prepareNextFrame();
-          else if (matches && state === YT.PlayerState.PLAYING && slot.loadedForPlay) settleNextFrame(slot);
-          else if (matches && state === YT.PlayerState.PAUSED && slot.preloadFramePending === false && slot.loadedForPlay) {
-            slot.preloadReady=true;
-          }
-        }
-        return;
-      }
+      if (slot !== currentSlot()) return;
       const S = YT.PlayerState;
+      const expectedId = slot.item?.id;
+      let actualId;
+      try { actualId = slot.player?.getVideoData()?.video_id; } catch (_) {}
       if (state === S.PLAYING) {
+        if (actualId !== expectedId) return;
         if (!feedEnabled) {
           try { slot.player.mute(); slot.player.pauseVideo(); } catch (_) {}
           return;
@@ -1240,13 +1257,42 @@
         finishStartingCurrent(slot);
       } else if (state === S.PAUSED || state === S.BUFFERING) {
         clearWatchTimer({ subtract: true });
+      } else if (state === S.CUED && slot.loadedForPlay && slot.activationRetries === 0) {
+        // A delayed offscreen cue can supersede the load issued on promotion.
+        slot.activationRetries = 1;
+        clearTimeout(slot.activationTimer);
+        slot.activationTimer = null;
+        startCurrent({ forceLoad: true });
       } else if (state === S.ENDED) {
         if (autoplayEnabled) programmaticMove(1);
       }
     }
 
-    window.onYouTubeIframeAPIReady = () => {
-      for (const slot of slots) {
+    function hasCurrentPlayer(slot) {
+      return slot.player && typeof slot.player.loadVideoById === 'function' &&
+        typeof slot.player.getPlayerState === 'function' &&
+        typeof slot.player.getVideoData === 'function';
+    }
+
+    function replacePlayer(slot) {
+      try { slot.player?.destroy?.(); } catch (_) {}
+      slot.player = null;
+      slot.ready = false;
+      slot.loadedForPlay = false;
+      try { slot.el.querySelector('iframe')?.remove(); } catch (_) {}
+      try { slot.host.remove(); } catch (_) {}
+      const host = document.createElement('div');
+      host.className = 'player-host';
+      host.id = slot.host.id;
+      slot.el.querySelector('.phone').appendChild(host);
+      slot.host = host;
+      createPlayer(slot);
+    }
+
+    function createPlayer(slot) {
+      const generation = (slot.playerGeneration || 0) + 1;
+      slot.playerGeneration = generation;
+      try {
         slot.player = new YT.Player(slot.host.id, {
           width: '100%',
           height: '100%',
@@ -1262,17 +1308,33 @@
           },
           events: {
             onReady: () => {
+              if (slot.playerGeneration !== generation) return;
               slot.ready = true;
               setIframePolicy(slot);
-              if (slot.item) assignSlot(slot, slot.position);
+              if (slot.item && (!feedEnabled || slot !== currentSlot())) {
+                assignSlot(slot, slot.position);
+              }
               try { slot.player.mute(); } catch (_) {}
               if (feedEnabled && slot === currentSlot()) startCurrent();
             },
-            onStateChange: (event) => onPlayerState(slot, event.data),
-            onError: (event) => markBad(slot, event.data),
+            onStateChange: (event) => {
+              if (slot.playerGeneration === generation) onPlayerState(slot, event.data);
+            },
+            onError: (event) => {
+              if (slot.playerGeneration !== generation) return;
+              let actualId;
+              try { actualId = slot.player.getVideoData()?.video_id; } catch (_) {}
+              if (!actualId || actualId === slot.item?.id) markBad(slot, event.data);
+            },
           },
         });
+      } catch (_) {
+        slot.player = null;
       }
+    }
+
+    window.onYouTubeIframeAPIReady = () => {
+      for (const slot of slots) createPlayer(slot);
     };
 
     function makeRain() {
