@@ -511,16 +511,6 @@
       .cloud, .rain-drop { animation: none !important; }
       .reveal, #intro, #soundPrompt { transition-duration: 0.01ms !important; }
       #feed { scroll-behavior: auto; }
-      .beach-clouds, .beach-far-wave, .beach-near-wave, .shore-wash,
-      .shore-foam, .foam-fragment, .wash-reach, .wet-sand, .wet-sheen, .sea-reflection { animation: none !important; }
-      .beach-far-wave { opacity: .12; }
-      .beach-near-wave { opacity: .32; }
-      .shore-wash { transform: translateY(-2%) scaleY(.78); }
-      .shore-foam { opacity: .25; }
-      .wash-reach { opacity: .3; }
-      .wet-sheen { opacity: .16; }
-      .wet-sand { opacity: .7; }
-      #decision::before, #decisionQuestion, #decisionChoices { transition-duration: .01ms !important; }
       body.checkpoint #decision, body.checkpoint-to-feed #decision,
       body.checkpoint-to-feed.checkpoint-beach #beach,
       body.checkpoint-to-feed #app { animation-duration: .01ms !important; }
@@ -1733,7 +1723,7 @@
           fadeBeachAudio(introRain, 0, 1400, () => {
             if (sessionMode === 'decision' || sessionMode === 'beach') introRain.pause();
           });
-          fadeBeachAudio(beachAudio, 0.6, 1500);
+          fadeBeachAudio(beachAudio, 0.70, 1500);
         };
         if (started && typeof started.then === 'function') started.then(crossfade).catch(() => {});
         else crossfade();
@@ -1771,11 +1761,11 @@
 
       const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
       const slide = reducedMotion ? 0 : 1000;
-      const settle = reducedMotion ? 0 : 800;
-      const beachFade = reducedMotion ? 0 : 2250;
-      const beachHold = reducedMotion ? 0 : 700;
-      const choicesFade = reducedMotion ? 0 : 1000;
-      const choiceHold = reducedMotion ? 0 : 1400;
+      const settle = 800;
+      const beachFade = 2250;
+      const beachHold = 700;
+      const choicesFade = 1000;
+      const choiceHold = 1400;
       scheduleCheckpointPhase(() => {
         document.body.classList.add('checkpoint-beach');
         beach.setAttribute('aria-hidden', 'false');
