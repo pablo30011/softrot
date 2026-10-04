@@ -280,8 +280,8 @@
     }
     .reveal {
       opacity: 0;
-      transform: translateY(7px);
-      transition: opacity 950ms ease, transform 1200ms cubic-bezier(.22,.61,.36,1);
+      transform: translateY(4px);
+      transition: opacity 1050ms ease, transform 1050ms ease;
     }
     .reveal.shown { opacity: 1; transform: translateY(0); }
     #softrotTitle {
@@ -315,10 +315,11 @@
     }
     #entryPrompt {
       margin: 24px auto 0;
-      color: rgba(246, 247, 246, .62);
-      font-size: 13px;
+      color: rgba(246, 247, 246, .82);
+      font-size: 17px;
+      font-weight: 500;
       line-height: 1.55;
-      letter-spacing: .02em;
+      letter-spacing: .035em;
     }
 
     @media (max-width: 560px) {
@@ -340,7 +341,7 @@
       #manifesto, #scrollLine { font-size: 14px; line-height: 1.4; }
       #scrollLine { margin-top: 8px; }
       #tagline { font-size: 15px; margin-top: 8px; line-height: 1.4; }
-      #entryPrompt { margin-top: 10px; font-size: 12px; line-height: 1.4; }
+      #entryPrompt { margin-top: 10px; font-size: 15px; line-height: 1.4; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -389,7 +390,7 @@
       <p id="manifesto" class="reveal">No outrage. No optimization.</p>
       <p id="scrollLine" class="reveal">Satisfy the urge to scroll<br>without being pulled anywhere.</p>
       <p id="tagline" class="reveal">Gentle brainrot from the forgotten corners of the internet.</p>
-      <p id="entryPrompt" class="reveal">stay for a moment<br>or keep moving<br>swipe away to begin</p>
+      <p id="entryPrompt" class="reveal">swipe to begin</p>
     </div>
 
     <audio id="introMusic" src="aquatic-ambience.mp3" preload="auto" loop></audio>
@@ -398,12 +399,12 @@
 
   <div id="message"></div>
   <button id="rainToggle" type="button" aria-pressed="true" title="Rain (R)">rain on</button>
-  <button id="autoplayToggle" type="button" aria-pressed="true" title="Autoplay 15s (A)">auto 15s</button>
+  <button id="autoplayToggle" type="button" aria-pressed="true" title="Autoplay 20s (A)">auto 20s</button>
 
   <script type="module">
     import { getCandidates } from './discovery.js';
 
-    const WATCH_MS = 15000;
+    const WATCH_MS = 20000;
     const PROGRAMMATIC_SCROLL_MS = 650;
     const SCROLL_IDLE_MS = 90;
     const SNAP_EPSILON = 0.035;
@@ -434,6 +435,9 @@
     let introSoundStarted = false;
     let entryPromptReady = false;
     let introTouchStart = null;
+    let introPointerStart = null;
+    let introWheelDistance = 0;
+    let introWheelResetTimer = null;
     let entering = false;
     let programmatic = false;
     let recycling = false;
@@ -443,7 +447,7 @@
     let watchTimer = null;
     let autoplayEnabled = true;
     let rainEnabled = true;
-    let displayedAutoplaySeconds = null;
+    let displayedAutoplayText = null;
     let queuedDirection = 0;
     let queuedDirectionTimer = null;
     let controlsSleepTimer = null;
@@ -701,7 +705,6 @@
 
     function setAutoplayEnabled(enabled) {
       autoplayEnabled = Boolean(enabled);
-
       if (autoplayEnabled) {
         resetWatchTimer();
         if (feedEnabled && !scrolling && !programmatic) startWatchTimer();
@@ -714,8 +717,8 @@
     function updateAutoplayToggleLabel() {
       const remainingSeconds = Math.ceil(Math.max(0, WATCH_MS - watchedMs) / 1000);
       const text = autoplayEnabled ? `auto ${remainingSeconds}s` : 'auto off';
-      if (text === displayedAutoplaySeconds) return;
-      displayedAutoplaySeconds = text;
+      if (text === displayedAutoplayText) return;
+      displayedAutoplayText = text;
       autoplayToggle.setAttribute('aria-pressed', autoplayEnabled ? 'true' : 'false');
       autoplayToggle.setAttribute('aria-label', autoplayEnabled
         ? `Autoplay on, ${remainingSeconds} seconds remaining. Press A to turn off.`
@@ -1315,28 +1318,68 @@
     }
 
     function revealIntroCopy() {
-      setTimeout(() => softrotTitle.classList.add('shown'), 900);
-      setTimeout(() => manifesto.classList.add('shown'), 2300);
-      setTimeout(() => scrollLine.classList.add('shown'), 4000);
-      setTimeout(() => tagline.classList.add('shown'), 6200);
-      setTimeout(() => {
-        entryPrompt.classList.add('shown');
-        entryPromptReady = true;
-      }, 8700);
+      const reveal = (element, delay, isEntry = false) => setTimeout(() => {
+        element.classList.add('shown');
+        if (isEntry) entryPromptReady = true;
+      }, delay);
+
+      reveal(softrotTitle, 900);
+      reveal(manifesto, 2500);
+      reveal(scrollLine, 4350);
+      reveal(tagline, 6650);
+      reveal(entryPrompt, 9200, true);
     }
 
     intro.addEventListener('click', () => {
-      if (!introSoundStarted) {
-        introSoundStarted = true;
-        soundPrompt.classList.add('fading');
-        setTimeout(() => { soundPrompt.style.display = 'none'; }, 700);
-        tryStartAudio(introMusic, 0.35);
-        if (rainEnabled) tryStartAudio(introRain, 0.13);
-        revealIntroCopy();
+      if (introSoundStarted) return;
+      introSoundStarted = true;
+      soundPrompt.classList.add('fading');
+      setTimeout(() => { soundPrompt.style.display = 'none'; }, 700);
+      tryStartAudio(introMusic, 0.35);
+      if (rainEnabled) tryStartAudio(introRain, 0.13);
+      revealIntroCopy();
+    });
+
+    intro.addEventListener('pointerdown', (event) => {
+      if (event.pointerType !== 'mouse' || !entryPromptReady || entering) return;
+      introPointerStart = { x: event.clientX, y: event.clientY };
+    }, { passive: true });
+
+    intro.addEventListener('pointerup', (event) => {
+      const start = introPointerStart;
+      introPointerStart = null;
+      if (!start || !entryPromptReady || entering) return;
+      const deltaX = event.clientX - start.x;
+      const upwardDistance = start.y - event.clientY;
+      if (upwardDistance >= 60 && upwardDistance > Math.abs(deltaX) * 1.2) enterFeed();
+    }, { passive: true });
+
+    intro.addEventListener('pointercancel', () => { introPointerStart = null; }, { passive: true });
+
+    intro.addEventListener('wheel', (event) => {
+      if (!introSoundStarted || !entryPromptReady || entering) return;
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+      const deltaY = event.deltaY * unit;
+      const deltaX = event.deltaX * unit;
+      if (Math.abs(deltaX) >= Math.abs(deltaY)) return;
+      if (deltaY <= 0) {
+        introWheelDistance = 0;
+        clearTimeout(introWheelResetTimer);
+        introWheelResetTimer = null;
         return;
       }
-      if (entryPromptReady && matchMedia('(hover: hover) and (pointer: fine)').matches) enterFeed();
-    });
+
+      introWheelDistance += deltaY;
+      clearTimeout(introWheelResetTimer);
+      introWheelResetTimer = setTimeout(() => {
+        introWheelDistance = 0;
+        introWheelResetTimer = null;
+      }, 200);
+      if (introWheelDistance >= 60) {
+        event.preventDefault();
+        enterFeed();
+      }
+    }, { passive: false });
 
     intro.addEventListener('touchstart', (event) => {
       if (event.touches.length !== 1) {
@@ -1361,7 +1404,10 @@
 
     document.addEventListener('keydown', (event) => {
       if (feedEnabled || !entryPromptReady) return;
-      if (event.key === 'Enter' || event.key === ' ') {
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!event.repeat) enterFeed();
+      } else if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         enterFeed();
       }
@@ -1370,6 +1416,9 @@
     function enterFeed() {
       if (entering || !entryPromptReady) return;
       entering = true;
+      clearTimeout(introWheelResetTimer);
+      introWheelResetTimer = null;
+      introWheelDistance = 0;
       feedEnabled = true;
       document.body.classList.add('feed-live');
       wakeControls();
