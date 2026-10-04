@@ -92,6 +92,7 @@
     .player-host,
     .player-host iframe { width: 100% !important; height: 100% !important; }
     .player-host { position: absolute; inset: 0; background: #69757d; }
+    .video-slide.visual-pending iframe { opacity: 0; }
     .shade { display: none; }
     #rainToggle {
       position: fixed;
@@ -344,10 +345,185 @@
       #entryPrompt { margin-top: 10px; font-size: 15px; line-height: 1.4; }
     }
 
+    body.beach #app,
+    body.beach #atmosphere { visibility: hidden; pointer-events: none; }
+    body.checkpoint #app { pointer-events: none; }
+    #decision, #beach {
+      display: none;
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      z-index: 50;
+    }
+    #decision { z-index: 51; isolation: isolate; }
+    body.checkpoint #decision,
+    body.checkpoint-to-feed #decision {
+      display: grid;
+      align-content: center;
+      justify-items: center;
+      gap: 28px;
+      padding: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+      color: rgba(246, 247, 246, .86);
+    }
+    #decision::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: radial-gradient(ellipse at 50% 42%, #78848a 0%, #69757d 58%, #56626a 100%);
+      opacity: 1;
+      transition: opacity 2250ms ease;
+      pointer-events: none;
+    }
+    body.checkpoint-beach #decision::before { opacity: 0; }
+    body.checkpoint #decision { animation: checkpointIn 1000ms cubic-bezier(.2,.65,.3,1) both; }
+    body.checkpoint-to-feed #decision { animation: cardOut 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
+    body.checkpoint-to-feed #app { visibility: visible; animation: cardIn 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
+    body.checkpoint-to-feed.checkpoint-beach #beach { animation: cardOut 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
+    #decisionQuestion {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      font: 400 clamp(34px, 7vw, 54px)/1.2 Georgia, "Times New Roman", serif;
+      letter-spacing: -.025em;
+      text-align: center;
+      opacity: 1;
+      transition: opacity 1350ms ease;
+    }
+    body.checkpoint-question-gone #decisionQuestion,
+    body.beach-ending #decisionQuestion { opacity: 0; }
+    #decisionChoices {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(32px, 10vw, 96px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 1000ms ease;
+    }
+    body.checkpoint-choices #decisionChoices { opacity: 1; pointer-events: auto; }
+    body.beach-ending #decisionChoices { opacity: 0; pointer-events: none; transition-duration: 850ms; }
+    #decisionChoices button {
+      min-width: 52px;
+      min-height: 48px;
+      border: 0;
+      background: transparent;
+      color: rgba(246, 247, 246, .68);
+      padding: 12px 14px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: color 160ms ease, background-color 160ms ease;
+    }
+    #decisionChoices button:hover,
+    #decisionChoices button:focus-visible { color: #fff; background: rgba(255,255,255,.07); }
+    #decisionChoices button:focus-visible { outline: 1px solid rgba(255,255,255,.65); outline-offset: 2px; }
+    #decisionChoices button:active { background: rgba(255,255,255,.13); }
+
+    #beach { background: #53616a; isolation: isolate; }
+    body.beach #beach,
+    body.checkpoint-beach #beach { display: block; }
+    #beachArt { display: block; width: 100%; height: 100%; pointer-events: none; }
+    .beach-clouds { animation: cloudDrift 80s ease-in-out infinite alternate; }
+    .beach-haze { opacity: .68; }
+    .beach-far-wave, .beach-near-wave, .shore-wash, .wash-reach {
+      transform-box: view-box;
+      transform-origin: 50% 72%;
+    }
+    .beach-far-wave { animation: farApproach 19s linear infinite; animation-delay: -7s; }
+    .beach-far-wave.second { animation-duration: 26s; animation-delay: -18s; }
+    .beach-near-wave { animation: nearApproach 14.7s ease-in-out infinite; animation-delay: -5s; }
+    .beach-near-wave.second { animation-duration: 21.3s; animation-delay: -14s; }
+    .shore-wash { animation: irregularWash 17.6s ease-in-out infinite; }
+    .wash-reach { animation: localWash 12.7s ease-in-out infinite; animation-delay: -4s; }
+    .shore-foam { animation: foamBreak 17.6s ease-in-out infinite; }
+    .foam-fragment { animation: foamDissolve 8.1s ease-in-out infinite; }
+    .foam-fragment.second { animation-duration: 10.3s; animation-delay: -3s; }
+    .foam-fragment.third { animation-duration: 13.7s; animation-delay: -8s; }
+    .wet-sand { animation: wetSand 17.6s ease-in-out infinite; }
+    .wet-sheen { animation: wetSheen 17.6s ease-in-out infinite; }
+    .sea-reflection { animation: reflectionDrift 13s ease-in-out infinite alternate; }
+    .portrait-shape { display: none; }
+    @keyframes checkpointIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes cardIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes cardOut { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+    @keyframes cloudDrift { to { transform: translateX(2.5%); } }
+    @keyframes reflectionDrift { to { transform: translate(1.5%, 1%); opacity: .11; } }
+    @keyframes farApproach {
+      0% { transform: translateY(-1.5%); opacity: 0; }
+      24% { opacity: .15; }
+      75% { opacity: .12; }
+      100% { transform: translateY(2.5%); opacity: 0; }
+    }
+    @keyframes nearApproach {
+      0% { transform: translate(-1%, -4%) scale(.95, .8); opacity: 0; }
+      28% { opacity: .28; }
+      68% { opacity: .42; }
+      100% { transform: translate(1%, 8%) scale(1.04, 1.16); opacity: 0; }
+    }
+    @keyframes irregularWash {
+      0%, 100% { transform: translateY(-3%) scaleY(.64); opacity: .46; }
+      26% { transform: translate(.2%, 1.2%) scaleY(.98); opacity: .7; }
+      39% { transform: translateY(2.6%) scaleY(1.1); opacity: .36; }
+      52% { transform: translate(-.3%, 2%) scaleY(1.04); opacity: .35; }
+      78% { transform: translateY(-2%) scaleY(.72); opacity: .56; }
+    }
+    @keyframes localWash {
+      0%, 100% { transform: translateY(-.8%) scaleY(.87); opacity: .2; }
+      43% { transform: translateY(1.2%) scaleY(1.08); opacity: .6; }
+      72% { transform: translateY(.2%) scaleY(1); opacity: .32; }
+    }
+    @keyframes foamBreak {
+      0%, 77%, 100% { opacity: .015; }
+      24% { opacity: .5; }
+      39% { opacity: .32; }
+      56% { opacity: .09; }
+    }
+    @keyframes foamDissolve {
+      0%, 100% { opacity: .18; }
+      36% { opacity: .85; }
+      74% { opacity: .28; }
+    }
+    @keyframes wetSand {
+      0%, 100% { opacity: .12; }
+      30% { opacity: .48; }
+      43%, 62% { opacity: .7; }
+      82% { opacity: .38; }
+    }
+    @keyframes wetSheen {
+      0%, 100% { opacity: .04; }
+      40%, 59% { opacity: .24; }
+      78% { opacity: .12; }
+    }
+    @media (max-width: 600px) and (orientation: portrait) {
+      .landscape-shape { display: none; }
+      .portrait-shape { display: inline; }
+      .beach-near-wave { animation-duration: 15.7s; }
+      .beach-near-wave.second { animation-duration: 22.3s; }
+    }
     @media (prefers-reduced-motion: reduce) {
       .cloud, .rain-drop { animation: none !important; }
       .reveal, #intro, #soundPrompt { transition-duration: 0.01ms !important; }
       #feed { scroll-behavior: auto; }
+      .beach-clouds, .beach-far-wave, .beach-near-wave, .shore-wash,
+      .shore-foam, .foam-fragment, .wash-reach, .wet-sand, .wet-sheen, .sea-reflection { animation: none !important; }
+      .beach-far-wave { opacity: .12; }
+      .beach-near-wave { opacity: .32; }
+      .shore-wash { transform: translateY(-2%) scaleY(.78); }
+      .shore-foam { opacity: .25; }
+      .wash-reach { opacity: .3; }
+      .wet-sheen { opacity: .16; }
+      .wet-sand { opacity: .7; }
+      #decision::before, #decisionQuestion, #decisionChoices { transition-duration: .01ms !important; }
+      body.checkpoint #decision, body.checkpoint-to-feed #decision,
+      body.checkpoint-to-feed.checkpoint-beach #beach,
+      body.checkpoint-to-feed #app { animation-duration: .01ms !important; }
     }
   </style>
 </head>
@@ -398,6 +574,86 @@
   </section>
 
   <div id="message"></div>
+  <section id="decision" aria-label="Session checkpoint" aria-hidden="true">
+    <h2 id="decisionQuestion">softly rotten?</h2>
+    <div id="decisionChoices" aria-hidden="true" inert>
+      <button id="decisionYes" type="button">yes</button>
+      <button id="decisionNo" type="button">no</button>
+    </div>
+  </section>
+  <section id="beach" aria-label="Beach" aria-hidden="true">
+    <svg id="beachArt" viewBox="0 0 1200 1000" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="beachSky" x2="0" y2="1"><stop stop-color="#303f49"/><stop offset=".66" stop-color="#697780"/><stop offset="1" stop-color="#ad9686"/></linearGradient>
+        <radialGradient id="beachGlow"><stop stop-color="#d5aa86" stop-opacity=".51"/><stop offset="1" stop-color="#d5aa86" stop-opacity="0"/></radialGradient>
+        <linearGradient id="beachSea" x2="0" y2="1"><stop stop-color="#6b8186"/><stop offset=".32" stop-color="#45636d"/><stop offset="1" stop-color="#294851"/></linearGradient>
+        <linearGradient id="beachSand" x2="0" y2="1"><stop stop-color="#80776a"/><stop offset=".45" stop-color="#625d54"/><stop offset="1" stop-color="#474641"/></linearGradient>
+        <linearGradient id="beachWet" x2="0" y2="1"><stop stop-color="#364e52" stop-opacity="0"/><stop offset=".48" stop-color="#33484a" stop-opacity=".68"/><stop offset=".9" stop-color="#3c4b49" stop-opacity=".45"/><stop offset="1" stop-color="#3c4b49" stop-opacity=".12"/></linearGradient>
+        <linearGradient id="beachWash" x2="0" y2="1"><stop stop-color="#476d76" stop-opacity="0"/><stop offset=".28" stop-color="#365d6b" stop-opacity=".8"/><stop offset=".7" stop-color="#547f89" stop-opacity=".67"/><stop offset=".95" stop-color="#92afa9" stop-opacity=".24"/><stop offset="1" stop-color="#abc0b5" stop-opacity=".02"/></linearGradient>
+        <linearGradient id="beachMist" x2="0" y2="1"><stop stop-color="#d3b7a0" stop-opacity=".04"/><stop offset=".45" stop-color="#d3b7a0" stop-opacity=".35"/><stop offset="1" stop-color="#d3b7a0" stop-opacity="0"/></linearGradient>
+        <path id="landscapeWashShape" d="M-30 675 C92 685 162 671 264 684 C371 677 475 690 553 681 C679 697 767 671 860 684 C1019 691 1118 676 1230 685 L1230 807 C1132 802 1058 828 973 812 C884 824 790 809 710 830 C612 809 519 828 417 813 C321 831 223 803 137 823 C73 805 23 813 -30 804Z"/>
+        <path id="portraitWashShape" d="M-30 721 C79 723 158 713 272 716 C386 724 478 690 560 691 C683 688 740 669 850 676 C1002 672 1100 657 1230 666 L1230 780 C1134 778 1064 791 987 779 C887 793 808 786 724 812 C618 792 524 822 425 812 C331 833 238 818 152 843 C74 827 16 847 -30 834Z"/>
+        <radialGradient id="beachWetSheen" cx=".55" cy=".55" r=".55" gradientTransform="translate(0 .22) scale(1 .6)"><stop stop-color="#c4b3a0" stop-opacity=".5"/><stop offset="1" stop-color="#c4b3a0" stop-opacity="0"/></radialGradient>
+        <radialGradient id="beachSwell" cx=".5" cy=".55" r=".55"><stop stop-color="#aac4bd" stop-opacity=".64"/><stop offset=".6" stop-color="#82a7a7" stop-opacity=".27"/><stop offset="1" stop-color="#82a7a7" stop-opacity="0"/></radialGradient>
+        <filter id="beachWaterSoftness" x="-5%" y="-15%" width="110%" height="130%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.2"/></filter>
+        <filter id="beachAirSoftness" x="-5%" y="-30%" width="110%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="6"/></filter>
+      </defs>
+      <rect width="1200" height="1000" fill="url(#beachSky)"/>
+      <ellipse cx="620" cy="447" rx="520" ry="185" fill="url(#beachGlow)"/>
+      <g class="beach-clouds" fill="#34464e" filter="url(#beachAirSoftness)">
+        <path d="M-70 226 C63 181 128 196 214 207 C300 216 352 171 443 194 C495 207 522 227 567 228 C432 242 355 248 261 239 C147 235 64 259 -70 252Z" opacity=".24"/>
+        <path d="M617 325 C711 300 796 294 869 306 C958 281 1075 289 1270 320 L1270 347 C1109 340 1025 359 943 345 C821 352 727 343 617 325Z" opacity=".21"/>
+        <path d="M115 373 C222 353 339 361 430 367 C353 381 228 388 115 373Z" opacity=".13"/>
+      </g>
+      <path class="landscape-shape" d="M0 708 C92 702 177 722 274 713 C367 700 484 726 572 715 C656 701 753 727 841 718 C971 710 1058 694 1200 713 L1200 1000 H0Z" fill="url(#beachSand)"/>
+      <path class="portrait-shape" d="M0 758 C95 745 182 751 284 741 C389 737 448 750 562 724 C675 708 754 719 843 700 C980 683 1074 677 1200 690 L1200 1000 H0Z" fill="url(#beachSand)"/>
+      <g class="landscape-shape" transform="translate(0 26) translate(600 720) scale(1 1.1) translate(-600 -720)">
+        <use class="wet-sand" filter="url(#beachWaterSoftness)" href="#landscapeWashShape" fill="url(#beachWet)"/>
+        <use class="wet-sheen" href="#landscapeWashShape" fill="url(#beachWetSheen)"/>
+      </g>
+      <g class="portrait-shape" transform="translate(0 26) translate(600 720) scale(1 1.1) translate(-600 -720)">
+        <use class="wet-sand" filter="url(#beachWaterSoftness)" href="#portraitWashShape" fill="url(#beachWet)"/>
+        <use class="wet-sheen" href="#portraitWashShape" fill="url(#beachWetSheen)"/>
+      </g>
+      <path class="landscape-shape" d="M0 448 C150 446 256 452 372 449 C493 451 583 443 690 447 C850 453 942 447 1045 449 C1113 451 1161 445 1200 447 L1200 713 C1058 694 971 710 841 718 C753 727 656 701 572 715 C484 726 367 700 274 713 C177 722 92 702 0 708Z" fill="url(#beachSea)"/>
+      <path class="portrait-shape" d="M0 440 C171 439 293 446 418 441 C590 441 716 448 852 443 C984 444 1097 438 1200 442 L1200 690 C1074 677 980 683 843 700 C754 719 675 708 562 724 C448 750 389 737 284 741 C182 751 95 745 0 758Z" fill="url(#beachSea)"/>
+      <path class="beach-haze" filter="url(#beachAirSoftness)" d="M0 423 C138 416 258 430 379 422 C530 428 617 415 744 426 C916 418 1039 429 1200 422 L1200 476 C1035 466 915 476 767 469 C626 473 485 464 370 472 C215 465 128 476 0 469Z" fill="url(#beachMist)"/>
+      <g class="sea-reflection" fill="url(#beachSwell)" opacity=".1" filter="url(#beachWaterSoftness)">
+        <path d="M421 514 Q487 502 571 511 L560 519 Q489 516 421 522Z M661 569 Q723 558 791 566 L806 577 Q736 573 661 581Z M316 634 Q372 621 442 630 L427 641 Q366 636 316 645Z"/>
+      </g>
+      <g class="beach-far-wave" fill="none" stroke="#aabbb6" stroke-linecap="round">
+        <path d="M156 511 q60 -4 119 0 M614 527 q74 -5 120 -1 M905 509 q46 -3 74 0" stroke-width="1.5"/>
+      </g>
+      <g class="beach-far-wave second" fill="none" stroke="#9bb1ae" stroke-linecap="round">
+        <path d="M93 566 q75 -6 143 -1 M490 581 q63 -5 120 0 M896 558 q83 -7 152 -2" stroke-width="2"/>
+      </g>
+      <g class="beach-near-wave" fill="none">
+        <path d="M-50 631 C87 606 179 626 291 612 C424 591 498 629 621 613 C770 588 943 618 1260 600 C1154 653 983 639 838 662 C683 686 601 648 458 674 C287 694 113 646 -50 663Z" fill="url(#beachSwell)" filter="url(#beachWaterSoftness)"/>
+      </g>
+      <g class="beach-near-wave second" fill="none">
+        <path d="M-50 675 C138 642 236 661 356 646 C523 625 576 670 706 650 C839 628 1007 656 1260 639 C1140 703 990 676 877 704 C701 737 601 694 449 719 C268 739 140 695 -50 708Z" fill="url(#beachSwell)" filter="url(#beachWaterSoftness)"/>
+      </g>
+      <g class="shore-wash landscape-shape">
+        <use href="#landscapeWashShape" fill="url(#beachWash)" filter="url(#beachWaterSoftness)"/>
+        <path class="wash-reach" filter="url(#beachWaterSoftness)" d="M170 725 C292 706 339 731 425 728 C502 710 572 735 651 725 L665 822 C611 834 577 823 533 851 C495 864 469 834 421 839 C358 852 328 827 276 843 C231 847 217 825 185 828Z" fill="url(#beachSwell)"/>
+        <g class="shore-foam" fill="#d4ded2">
+          <path class="foam-fragment" d="M176 814 Q205 808 234 816 L224 820 Q204 814 181 819Z M244 819 l19 2 -9 3 -13 -1Z"/>
+          <path class="foam-fragment second" d="M678 825 Q701 833 726 824 L745 820 737 825 Q706 838 684 830Z"/>
+          <path class="foam-fragment third" d="M1041 820 Q1063 825 1084 815 L1108 808 1100 813 Q1068 831 1046 826Z"/>
+        </g>
+      </g>
+      <g class="shore-wash portrait-shape">
+        <use href="#portraitWashShape" fill="url(#beachWash)" filter="url(#beachWaterSoftness)"/>
+        <path class="wash-reach" filter="url(#beachWaterSoftness)" d="M124 737 C233 708 310 728 388 720 C459 705 513 730 588 711 L609 823 C558 839 527 828 482 851 C441 869 419 842 374 850 C310 866 278 841 225 858 C178 861 155 841 131 841Z" fill="url(#beachSwell)"/>
+        <g class="shore-foam" fill="#d4ded2">
+          <path class="foam-fragment" d="M186 830 Q210 820 237 826 L232 830 Q213 824 191 834Z M250 828 l18 3 -10 3 -11 -2Z"/>
+          <path class="foam-fragment second" d="M716 809 Q740 804 761 794 L779 791 773 797 Q744 812 722 814Z"/>
+          <path class="foam-fragment third" d="M1051 786 Q1075 790 1098 781 L1116 778 1108 784 Q1081 796 1056 791Z"/>
+        </g>
+      </g>
+    </svg>
+  </section>
+  <audio id="beachAudio" src="beach-ambience.mp3" preload="none" loop></audio>
   <button id="rainToggle" type="button" aria-pressed="true" title="Rain (R)">rain on</button>
   <button id="autoplayToggle" type="button" aria-pressed="true" title="Autoplay 20s (A)">auto 20s</button>
 
@@ -423,6 +679,12 @@
     const introRain = document.querySelector('#introRain');
     const rainVisual = document.querySelector('#rainVisual');
     const messageEl = document.querySelector('#message');
+    const decision = document.querySelector('#decision');
+    const decisionChoices = document.querySelector('#decisionChoices');
+    const decisionYes = document.querySelector('#decisionYes');
+    const decisionNo = document.querySelector('#decisionNo');
+    const beach = document.querySelector('#beach');
+    const beachAudio = document.querySelector('#beachAudio');
     const autoplayToggle = document.querySelector('#autoplayToggle');
     const rainToggle = document.querySelector('#rainToggle');
 
@@ -454,6 +716,16 @@
     let controlsSleepTimer = null;
     let watchedMs = 0;
     let lastWatchTickAt = 0;
+    let sessionMode = 'intro';
+    let sessionCount = 0;
+    let sessionLimit = 0;
+    let firstCheckpointResolved = false;
+    let visitToken = 0;
+    let countedVisitToken = 0;
+    let beachAudioAvailable = true;
+    let beachAudioPlaying = false;
+    const checkpointSequenceTimers = [];
+    const beachFadeTokens = new WeakMap();
     const badIds = new Set();
     const badIdRecords = {};
     const BAD_IDS_STORAGE_KEY = '0views.bad-videos.v1';
@@ -466,6 +738,8 @@
       ready: false,
       item: null,
       position: -1,
+      visualReady: false,
+      reportedVideoId: null,
       loadedForPlay: false,
       randomStartApplied: false,
       randomStartSeconds: null,
@@ -575,6 +849,24 @@
     function viewportHeight() { return feed.clientHeight || window.innerHeight || 1; }
     function currentSlot() { return slots[1]; }
 
+    function resetSessionCheckpoint() {
+      sessionCount = 0;
+      sessionLimit = firstCheckpointResolved ? 20 + randomInt(11) : 15;
+      countedVisitToken = visitToken;
+    }
+
+    function countSettledCurrent(slot) {
+      if (sessionMode !== 'feed' || !feedEnabled || scrolling || programmatic ||
+          slot !== currentSlot() || countedVisitToken === visitToken ||
+          slot.item?.id !== candidates[currentIndex]?.id) return;
+      try {
+        if (slot.player.getPlayerState() !== YT.PlayerState.PLAYING ||
+            slot.player.getVideoData()?.video_id !== slot.item.id) return;
+      } catch (_) { return; }
+      countedVisitToken = visitToken;
+      sessionCount += 1;
+    }
+
     function showFatal(text) {
       messageEl.textContent = text;
       messageEl.style.display = 'grid';
@@ -598,10 +890,25 @@
       clearAudibleTimers(slot);
     }
 
+    function observeSlotVideoId(slot) {
+      let reportedId = null;
+      try { reportedId = slot.player?.getVideoData?.()?.video_id || null; } catch (_) {}
+      slot.reportedVideoId = reportedId;
+      if (reportedId === slot.item?.id) slot.visualReady = true;
+      else if (reportedId) slot.visualReady = false;
+      slot.el.classList.toggle('visual-pending', !slot.visualReady);
+    }
+
     function assignSlot(slot, index) {
       if (index < 0 || !candidates.length) return;
       slot.position = wrap(index);
-      slot.item = candidates[slot.position];
+      const item = candidates[slot.position];
+      if (slot.item?.id !== item.id) {
+        slot.visualReady = false;
+        slot.reportedVideoId = null;
+        slot.el.classList.add('visual-pending');
+      }
+      slot.item = item;
       resetSlotPlayback(slot);
       if (!slot.ready || !slot.player || !slot.item) return;
       try {
@@ -819,6 +1126,7 @@
           slot.activationRetries = 0;
         }
       } catch (_) {}
+      countSettledCurrent(slot);
       enforceAudible(slot);
       if (!scrolling && !programmatic) startWatchTimer();
     }
@@ -886,6 +1194,7 @@
       }
       watchCurrentStart(slot);
       if (!slot.ready || !hasCurrentPlayer(slot)) return;
+      observeSlotVideoId(slot);
 
       try {
         slot.player.setVolume(100);
@@ -958,6 +1267,7 @@
     }
 
     function markBad(slot, errorCode = 0) {
+      if (sessionMode !== 'feed') return;
       if (!slot?.item) return;
       if (errorCode !== null) rememberBadId(slot.item.id, errorCode);
       const badIndex = slot.position;
@@ -979,6 +1289,7 @@
         }
 
         rememberRecent(currentIndex);
+        visitToken += 1;
         const previous = backStack.length ? backStack[backStack.length - 1] : currentIndex;
         nextIndex = pickRandomGoodIndex([currentIndex, previous, badIndex]);
 
@@ -1002,6 +1313,10 @@
 
     function commitDirection(direction) {
       if (!direction || !candidates.length) return;
+      if (direction > 0 && sessionMode === 'feed' && sessionCount >= sessionLimit) {
+        showDecision();
+        return;
+      }
       recycling = true;
       clearWatchTimer();
       scrolling = false;
@@ -1074,6 +1389,7 @@
         if (nextIndex >= 0) assignSlot(slots[2], nextIndex);
       }
 
+      visitToken += 1;
       resetWatchTimer();
 
       // Re-centering after recycling the player roles kills residual trackpad
@@ -1133,6 +1449,7 @@
       } else {
         // Same video won the snap. Make sure it is audible and restart only
         // the remaining portion of the 15-second viewing timer.
+        countSettledCurrent(currentSlot());
         enforceAudible(currentSlot());
         if (autoplayEnabled) startWatchTimer();
       }
@@ -1155,6 +1472,10 @@
 
     function programmaticMove(direction) {
       if (!feedEnabled || !direction) return;
+      if (direction > 0 && sessionMode === 'feed' && sessionCount >= sessionLimit) {
+        showDecision();
+        return;
+      }
 
       if (programmatic || recycling || scrolling) {
         // Keep the latest key intent instead of silently dropping it.
@@ -1238,6 +1559,7 @@
     });
 
     function onPlayerState(slot, state) {
+      observeSlotVideoId(slot);
       if (slot !== currentSlot()) return;
       const S = YT.PlayerState;
       const expectedId = slot.item?.id;
@@ -1279,6 +1601,9 @@
       slot.player = null;
       slot.ready = false;
       slot.loadedForPlay = false;
+      slot.visualReady = false;
+      slot.reportedVideoId = null;
+      slot.el.classList.add('visual-pending');
       try { slot.el.querySelector('iframe')?.remove(); } catch (_) {}
       try { slot.host.remove(); } catch (_) {}
       const host = document.createElement('div');
@@ -1314,6 +1639,7 @@
               if (slot.item && (!feedEnabled || slot !== currentSlot())) {
                 assignSlot(slot, slot.position);
               }
+              observeSlotVideoId(slot);
               try { slot.player.mute(); } catch (_) {}
               if (feedEnabled && slot === currentSlot()) startCurrent();
             },
@@ -1364,6 +1690,180 @@
       }
       requestAnimationFrame(frame);
     }
+
+    function fadeBeachAudio(audio, target, duration, done) {
+      const token = (beachFadeTokens.get(audio) || 0) + 1;
+      beachFadeTokens.set(audio, token);
+      const start = Number(audio.volume || 0);
+      const started = performance.now();
+      function frame(now) {
+        if (beachFadeTokens.get(audio) !== token) return;
+        const t = Math.min(1, (now - started) / duration);
+        audio.volume = Math.max(0, Math.min(1, start + (target - start) * t));
+        if (t < 1) requestAnimationFrame(frame);
+        else done?.();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function clearCheckpointSequence() {
+      for (const timer of checkpointSequenceTimers) clearTimeout(timer);
+      checkpointSequenceTimers.length = 0;
+    }
+
+    function scheduleCheckpointPhase(action, delay) {
+      checkpointSequenceTimers.push(setTimeout(() => {
+        if (sessionMode === 'decision') action();
+      }, delay));
+    }
+
+    function startBeachAmbience() {
+      if (!rainEnabled || !beachAudioAvailable || beachAudioPlaying) return;
+      try {
+        if (beachAudio.paused) beachAudio.volume = 0;
+        beachAudio.loop = true;
+        const started = beachAudio.play();
+        const crossfade = () => {
+          if (sessionMode !== 'decision' && sessionMode !== 'beach') {
+            beachAudio.pause();
+            return;
+          }
+          if (beachAudioPlaying) return;
+          beachAudioPlaying = true;
+          fadeBeachAudio(introRain, 0, 1400, () => {
+            if (sessionMode === 'decision' || sessionMode === 'beach') introRain.pause();
+          });
+          fadeBeachAudio(beachAudio, 0.6, 1500);
+        };
+        if (started && typeof started.then === 'function') started.then(crossfade).catch(() => {});
+        else crossfade();
+      } catch (_) {}
+    }
+
+    function showDecision() {
+      if (sessionMode !== 'feed') return;
+      clearCheckpointSequence();
+      sessionMode = 'decision';
+      feedEnabled = false;
+      clearWatchTimer();
+      clearTimeout(queuedDirectionTimer);
+      clearTimeout(scrollTimer);
+      clearTimeout(recycleUnlockTimer);
+      queuedDirectionTimer = null;
+      queuedDirection = 0;
+      scrolling = false;
+      recycling = false;
+      feed.scrollTop = viewportHeight();
+      for (const slot of slots) {
+        clearAudibleTimers(slot);
+        clearTimeout(slot.randomProbeTimer);
+        clearTimeout(slot.activationTimer);
+        slot.randomProbeTimer = null;
+        slot.activationTimer = null;
+        try { slot.player?.mute(); slot.player?.pauseVideo(); } catch (_) {}
+      }
+      document.body.classList.remove('feed-live');
+      document.body.classList.add('checkpoint');
+      decision.setAttribute('aria-hidden', 'false');
+      decisionChoices.inert = true;
+      decisionChoices.setAttribute('aria-hidden', 'true');
+      beach.setAttribute('aria-hidden', 'true');
+
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      const slide = reducedMotion ? 0 : 1000;
+      const settle = reducedMotion ? 0 : 800;
+      const beachFade = reducedMotion ? 0 : 2250;
+      const beachHold = reducedMotion ? 0 : 700;
+      const choicesFade = reducedMotion ? 0 : 1000;
+      const choiceHold = reducedMotion ? 0 : 1400;
+      scheduleCheckpointPhase(() => {
+        document.body.classList.add('checkpoint-beach');
+        beach.setAttribute('aria-hidden', 'false');
+        startBeachAmbience();
+      }, slide + settle);
+      scheduleCheckpointPhase(() => {
+        document.body.classList.add('checkpoint-choices');
+        decisionChoices.inert = false;
+        decisionChoices.setAttribute('aria-hidden', 'false');
+      }, slide + settle + beachFade + beachHold);
+      scheduleCheckpointPhase(() => {
+        document.body.classList.add('checkpoint-question-gone');
+      }, slide + settle + beachFade + beachHold + choicesFade + choiceHold);
+    }
+
+    function showBeach() {
+      if (sessionMode !== 'decision' || !document.body.classList.contains('checkpoint-choices')) return;
+      firstCheckpointResolved = true;
+      clearCheckpointSequence();
+      decisionYes.blur?.();
+      sessionMode = 'beach';
+      decisionChoices.inert = true;
+      decisionChoices.setAttribute('aria-hidden', 'true');
+      // A YES click can unlock beach audio when timed playback was blocked.
+      startBeachAmbience();
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      setTimeout(() => {
+        document.body.classList.add('beach-ending');
+        setTimeout(() => {
+          document.body.classList.remove('checkpoint', 'checkpoint-beach', 'checkpoint-choices', 'checkpoint-question-gone', 'beach-ending');
+          document.body.classList.add('beach');
+          decision.setAttribute('aria-hidden', 'true');
+        }, reducedMotion ? 0 : 850);
+      }, reducedMotion ? 0 : 250);
+    }
+
+    function resumeFreshSession() {
+      if (sessionMode !== 'decision') return;
+      firstCheckpointResolved = true;
+      clearCheckpointSequence();
+      decisionNo.blur?.();
+      sessionMode = 'transition';
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      setTimeout(() => {
+        document.body.classList.remove('checkpoint', 'checkpoint-choices', 'checkpoint-question-gone');
+        document.body.classList.add('checkpoint-to-feed');
+        decision.setAttribute('aria-hidden', 'true');
+        beach.setAttribute('aria-hidden', 'true');
+        fadeBeachAudio(beachAudio, 0, 1000, () => {
+          if (sessionMode === 'feed') {
+            beachAudio.pause();
+            beachAudioPlaying = false;
+          }
+        });
+        if (rainEnabled) {
+          try {
+            const started = introRain.play();
+            if (started && typeof started.then === 'function') {
+              started.then(() => {
+                if (sessionMode === 'feed' || document.body.classList.contains('checkpoint-to-feed')) fadeBeachAudio(introRain, 0.075, 1200);
+              }).catch(() => {});
+            } else {
+              fadeBeachAudio(introRain, 0.075, 1200);
+            }
+          } catch (_) {}
+        }
+        setTimeout(() => {
+          document.body.classList.remove('checkpoint-to-feed', 'checkpoint-beach');
+          document.body.classList.add('feed-live');
+          sessionMode = 'feed';
+          resetSessionCheckpoint();
+          feedEnabled = true;
+          // Begin the next video only after the feed card has settled.
+          commitDirection(1);
+        }, reducedMotion ? 0 : 950);
+      }, reducedMotion ? 0 : 250);
+    }
+
+    beachAudio.addEventListener('error', () => { beachAudioAvailable = false; });
+    decisionYes.addEventListener('click', showBeach);
+    decisionNo.addEventListener('click', resumeFreshSession);
+    decision.addEventListener('wheel', (event) => event.preventDefault(), { passive: false });
+    document.addEventListener('keydown', (event) => {
+      if (sessionMode === 'decision' &&
+          ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+      }
+    });
 
     function tryStartAudio(audio, target) {
       if (!audio) return;
@@ -1478,6 +1978,9 @@
     function enterFeed() {
       if (entering || !entryPromptReady) return;
       entering = true;
+      sessionMode = 'feed';
+      resetSessionCheckpoint();
+      visitToken += 1;
       clearTimeout(introWheelResetTimer);
       introWheelResetTimer = null;
       introWheelDistance = 0;
