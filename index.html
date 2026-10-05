@@ -1864,18 +1864,6 @@
             beachAudioPlaying = false;
           }
         });
-        if (rainEnabled) {
-          try {
-            const started = introRain.play();
-            if (started && typeof started.then === 'function') {
-              started.then(() => {
-                if (sessionMode === 'feed' || document.body.classList.contains('checkpoint-to-feed')) fadeBeachAudio(introRain, 0.075, 1200);
-              }).catch(() => {});
-            } else {
-              fadeBeachAudio(introRain, 0.075, 1200);
-            }
-          } catch (_) {}
-        }
         setTimeout(() => {
           document.body.classList.remove('checkpoint-to-feed', 'checkpoint-beach');
           document.body.classList.add('feed-live');
