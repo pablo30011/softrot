@@ -376,14 +376,15 @@
       z-index: 0;
       background: radial-gradient(ellipse at 50% 42%, #78848a 0%, #69757d 58%, #56626a 100%);
       opacity: 1;
-      transition: opacity 2250ms ease;
+      transition: opacity var(--checkpoint-beach-fade) ease;
       pointer-events: none;
     }
     body.checkpoint-beach #decision::before { opacity: 0; }
-    body.checkpoint #decision { animation: checkpointIn 1000ms cubic-bezier(.2,.65,.3,1) both; }
+    body.checkpoint #decision { animation: checkpointIn var(--checkpoint-enter) cubic-bezier(.2,.65,.3,1) both; }
     body.checkpoint-to-feed #decision { animation: cardOut 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
     body.checkpoint-to-feed #app { visibility: visible; animation: cardIn 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
     body.checkpoint-to-feed.checkpoint-beach #beach { animation: cardOut 950ms cubic-bezier(.3,.65,.5,1) both; pointer-events: none; }
+    body.checkpoint-question #decisionQuestion { opacity: 1; }
     #decisionQuestion {
       position: relative;
       z-index: 1;
@@ -391,11 +392,11 @@
       font: 400 clamp(34px, 7vw, 54px)/1.2 Georgia, "Times New Roman", serif;
       letter-spacing: -.025em;
       text-align: center;
-      opacity: 1;
-      transition: opacity 1350ms ease;
+      opacity: 0;
+      transition: opacity var(--checkpoint-question-fade) ease;
     }
     body.checkpoint-question-gone #decisionQuestion,
-    body.beach-ending #decisionQuestion { opacity: 0; }
+    body.beach-ending #decisionQuestion { opacity: 0; transition-duration: var(--checkpoint-question-out); }
     #decisionChoices {
       position: relative;
       z-index: 1;
@@ -405,7 +406,7 @@
       gap: clamp(32px, 10vw, 96px);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 1000ms ease;
+      transition: opacity var(--checkpoint-choices-fade) ease;
     }
     body.checkpoint-choices #decisionChoices { opacity: 1; pointer-events: auto; }
     body.beach-ending #decisionChoices { opacity: 0; pointer-events: none; transition-duration: 850ms; }
@@ -553,7 +554,7 @@
 
     <div id="introCopy">
       <h1 id="softrotTitle" class="reveal">Softrot</h1>
-      <p id="manifesto" class="reveal">No outrage. No optimization.</p>
+      <p id="manifesto" class="reveal">An experimental substitute for optimized short-form feeds.</p>
       <p id="scrollLine" class="reveal">Satisfy the urge to scroll<br>without being pulled anywhere.</p>
       <p id="tagline" class="reveal">Gentle brainrot from the forgotten corners of the internet.</p>
       <p id="entryPrompt" class="reveal">swipe to begin</p>
@@ -565,7 +566,7 @@
 
   <div id="message"></div>
   <section id="decision" aria-label="Session checkpoint" aria-hidden="true">
-    <h2 id="decisionQuestion">softly rotten?</h2>
+    <h2 id="decisionQuestion" aria-hidden="true">softly rotten?</h2>
     <div id="decisionChoices" aria-hidden="true" inert>
       <button id="decisionYes" type="button">yes</button>
       <button id="decisionNo" type="button">no</button>
@@ -650,6 +651,32 @@
   <script type="module">
     import { getCandidates } from './discovery.js';
 
+    // Checkpoint pacing: edit beat multipliers here; both motion modes share this clock.
+    const BASE_BEAT = 900;
+    const CHECKPOINT_INTERVAL = 15;
+    const DEBUG_CHECKPOINT_TIMING = false;
+    const CHECKPOINT_TIMING = {
+      beat: BASE_BEAT,
+      enter: 10 / 9, // Exactly 1000 ms with the shared 900 ms beat.
+      enterBreathe: 1,
+      questionFade: 1,
+      questionBreathe: 1.5,
+      beachFade: 2.5,
+      beachBreathe: 1,
+      choicesFade: 1,
+      choicesBreathe: 2,
+      questionOut: 1.5,
+    };
+    const checkpointMs = Object.fromEntries(Object.entries(CHECKPOINT_TIMING)
+      .filter(([key]) => key !== 'beat')
+      .map(([key, beats]) => [key, beats * CHECKPOINT_TIMING.beat]));
+    let checkpointStartedAt = 0;
+    function logCheckpointPhase(phase) {
+      if (DEBUG_CHECKPOINT_TIMING) {
+        console.log(`[checkpoint +${Math.round(performance.now() - checkpointStartedAt)}ms] ${phase}`);
+      }
+    }
+
     const WATCH_MS = 20000;
     const CURRENT_START_TIMEOUT_MS = 6000;
     const PROGRAMMATIC_SCROLL_MS = 650;
@@ -709,7 +736,6 @@
     let sessionMode = 'intro';
     let sessionCount = 0;
     let sessionLimit = 0;
-    let firstCheckpointResolved = false;
     let visitToken = 0;
     let countedVisitToken = 0;
     let beachAudioAvailable = true;
@@ -841,7 +867,7 @@
 
     function resetSessionCheckpoint() {
       sessionCount = 0;
-      sessionLimit = firstCheckpointResolved ? 20 + randomInt(11) : 15;
+      sessionLimit = CHECKPOINT_INTERVAL;
       countedVisitToken = visitToken;
     }
 
@@ -1733,6 +1759,8 @@
     function showDecision() {
       if (sessionMode !== 'feed') return;
       clearCheckpointSequence();
+      document.body.classList.remove('checkpoint-question', 'checkpoint-question-gone');
+      document.getElementById('decisionQuestion').setAttribute('aria-hidden', 'true');
       sessionMode = 'decision';
       feedEnabled = false;
       clearWatchTimer();
@@ -1759,31 +1787,48 @@
       decisionChoices.setAttribute('aria-hidden', 'true');
       beach.setAttribute('aria-hidden', 'true');
 
-      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-      const slide = reducedMotion ? 0 : 1000;
-      const settle = 800;
-      const beachFade = 2250;
-      const beachHold = 700;
-      const choicesFade = 1000;
-      const choiceHold = 1400;
-      scheduleCheckpointPhase(() => {
+      const reducedMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      checkpointStartedAt = performance.now();
+      for (const [key, value] of Object.entries(checkpointMs)) {
+        decision.style.setProperty(`--checkpoint-${key.replace(/[A-Z]/g, c => '-' + c.toLowerCase())}`, `${value}ms`);
+      }
+      if (DEBUG_CHECKPOINT_TIMING) console.log('[checkpoint timing]', {
+        BASE_BEAT, beatMultipliers: CHECKPOINT_TIMING, resolvedMilliseconds: checkpointMs, reducedMotion,
+      });
+      logCheckpointPhase('checkpoint-enter-start');
+      let elapsed = 0;
+      const phase = (duration, action) => {
+        elapsed += duration;
+        scheduleCheckpointPhase(action, elapsed);
+      };
+      const revealCheckpoint = (className, id) => {
+        document.body.classList.add(className);
+        document.getElementById(id).setAttribute('aria-hidden', 'false');
+      };
+      phase(checkpointMs.enter, () => logCheckpointPhase('checkpoint-enter-settled'));
+      phase(checkpointMs.enterBreathe, () => revealCheckpoint('checkpoint-question', 'decisionQuestion'));
+      phase(checkpointMs.questionFade, () => logCheckpointPhase('question-visible'));
+      phase(checkpointMs.questionBreathe, () => {
         document.body.classList.add('checkpoint-beach');
         beach.setAttribute('aria-hidden', 'false');
         startBeachAmbience();
-      }, slide + settle);
-      scheduleCheckpointPhase(() => {
-        document.body.classList.add('checkpoint-choices');
+      });
+      phase(checkpointMs.beachFade, () => logCheckpointPhase('beach-visible'));
+      phase(checkpointMs.beachBreathe, () => document.body.classList.add('checkpoint-choices'));
+      phase(checkpointMs.choicesFade, () => {
         decisionChoices.inert = false;
         decisionChoices.setAttribute('aria-hidden', 'false');
-      }, slide + settle + beachFade + beachHold);
-      scheduleCheckpointPhase(() => {
-        document.body.classList.add('checkpoint-question-gone');
-      }, slide + settle + beachFade + beachHold + choicesFade + choiceHold);
+        logCheckpointPhase('choice-visible');
+      });
+      phase(checkpointMs.choicesBreathe, () => document.body.classList.add('checkpoint-question-gone'));
+      phase(checkpointMs.questionOut, () => {
+        document.getElementById('decisionQuestion').setAttribute('aria-hidden', 'true');
+        logCheckpointPhase('final-checkpoint-state');
+      });
     }
 
     function showBeach() {
-      if (sessionMode !== 'decision' || !document.body.classList.contains('checkpoint-choices')) return;
-      firstCheckpointResolved = true;
+      if (sessionMode !== 'decision' || decisionChoices.inert) return;
       clearCheckpointSequence();
       decisionYes.blur?.();
       sessionMode = 'beach';
@@ -1803,8 +1848,7 @@
     }
 
     function resumeFreshSession() {
-      if (sessionMode !== 'decision') return;
-      firstCheckpointResolved = true;
+      if (sessionMode !== 'decision' || decisionChoices.inert) return;
       clearCheckpointSequence();
       decisionNo.blur?.();
       sessionMode = 'transition';
