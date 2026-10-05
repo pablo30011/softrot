@@ -742,6 +742,9 @@
     let beachAudioPlaying = false;
     const checkpointSequenceTimers = [];
     const beachFadeTokens = new WeakMap();
+    const audioFadeFrames = new WeakMap();
+    let rainPlaybackGeneration = 0;
+    let rainPauseTimer = null;
     const badIds = new Set();
     const badIdRecords = {};
     const BAD_IDS_STORAGE_KEY = '0views.bad-videos.v1';
@@ -1057,7 +1060,11 @@
       setAutoplayEnabled(!autoplayEnabled);
     });
 
-    function setRainEnabled(enabled) {
+    function setRainEnabled(enabled, immediate = false) {
+      rainPlaybackGeneration++;
+      clearTimeout(rainPauseTimer);
+      rainPauseTimer = null;
+      cancelAudioFade(introRain);
       rainEnabled = Boolean(enabled);
       rainToggle.setAttribute('aria-pressed', rainEnabled ? 'true' : 'false');
       rainToggle.setAttribute('aria-label', rainEnabled ? 'Rain on. Press R to turn off.' : 'Rain off. Press R to turn on.');
@@ -1070,9 +1077,12 @@
           if (result && typeof result.catch === 'function') result.catch(() => {});
           fadeAudio(introRain, feedEnabled ? 0.075 : 0.13, 450);
         } catch (_) {}
+      } else if (immediate) {
+        introRain.volume = 0;
+        try { introRain.pause(); } catch (_) {}
       } else {
         fadeAudio(introRain, 0, 350);
-        setTimeout(() => {
+        rainPauseTimer = setTimeout(() => {
           if (!rainEnabled) {
             try { introRain.pause(); } catch (_) {}
           }
@@ -1695,19 +1705,19 @@
       rainVisual.appendChild(fragment);
     }
 
+    function cancelAudioFade(audio) {
+      beachFadeTokens.set(audio, (beachFadeTokens.get(audio) || 0) + 1);
+      cancelAnimationFrame(audioFadeFrames.get(audio));
+      audioFadeFrames.delete(audio);
+    }
+
     function fadeAudio(audio, target, duration) {
       if (!audio) return;
-      const start = Number(audio.volume || 0);
-      const started = performance.now();
-      function frame(now) {
-        const t = Math.min(1, (now - started) / duration);
-        audio.volume = Math.max(0, Math.min(1, start + (target - start) * t));
-        if (t < 1) requestAnimationFrame(frame);
-      }
-      requestAnimationFrame(frame);
+      fadeBeachAudio(audio, target, duration);
     }
 
     function fadeBeachAudio(audio, target, duration, done) {
+      cancelAudioFade(audio);
       const token = (beachFadeTokens.get(audio) || 0) + 1;
       beachFadeTokens.set(audio, token);
       const start = Number(audio.volume || 0);
@@ -1716,10 +1726,13 @@
         if (beachFadeTokens.get(audio) !== token) return;
         const t = Math.min(1, (now - started) / duration);
         audio.volume = Math.max(0, Math.min(1, start + (target - start) * t));
-        if (t < 1) requestAnimationFrame(frame);
-        else done?.();
+        if (t < 1) audioFadeFrames.set(audio, requestAnimationFrame(frame));
+        else {
+          audioFadeFrames.delete(audio);
+          done?.();
+        }
       }
-      requestAnimationFrame(frame);
+      audioFadeFrames.set(audio, requestAnimationFrame(frame));
     }
 
     function clearCheckpointSequence() {
@@ -1849,6 +1862,7 @@
 
     function resumeFreshSession() {
       if (sessionMode !== 'decision' || decisionChoices.inert) return;
+      setRainEnabled(false, true);
       clearCheckpointSequence();
       decisionNo.blur?.();
       sessionMode = 'transition';
@@ -1888,15 +1902,20 @@
     });
 
     function tryStartAudio(audio, target) {
-      if (!audio) return;
+      if (!audio || (audio === introRain && !rainEnabled)) return;
+      const rainGeneration = rainPlaybackGeneration;
+      const fadeStartedAudio = () => {
+        if (audio === introRain && (rainGeneration !== rainPlaybackGeneration || !rainEnabled)) return;
+        fadeAudio(audio, target, 1800);
+      };
       try {
         audio.volume = 0;
         audio.currentTime = 0;
         const result = audio.play();
         if (result && typeof result.then === 'function') {
-          result.then(() => fadeAudio(audio, target, 1800)).catch(() => {});
+          result.then(fadeStartedAudio).catch(() => {});
         } else {
-          fadeAudio(audio, target, 1800);
+          fadeStartedAudio();
         }
       } catch (_) {}
     }
