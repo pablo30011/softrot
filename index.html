@@ -727,6 +727,7 @@
     let watchTimer = null;
     let autoplayEnabled = true;
     let rainEnabled = true;
+    let beachAmbienceEnabled = true;
     let displayedAutoplayText = null;
     let queuedDirection = 0;
     let queuedDirectionTimer = null;
@@ -1060,12 +1061,13 @@
       setAutoplayEnabled(!autoplayEnabled);
     });
 
-    function setRainEnabled(enabled, immediate = false) {
+    function setRainEnabled(enabled, immediate = false, updateAmbience = true) {
       rainPlaybackGeneration++;
       clearTimeout(rainPauseTimer);
       rainPauseTimer = null;
       cancelAudioFade(introRain);
       rainEnabled = Boolean(enabled);
+      if (updateAmbience) beachAmbienceEnabled = rainEnabled;
       rainToggle.setAttribute('aria-pressed', rainEnabled ? 'true' : 'false');
       rainToggle.setAttribute('aria-label', rainEnabled ? 'Rain on. Press R to turn off.' : 'Rain off. Press R to turn on.');
       rainToggle.textContent = rainEnabled ? 'rain on' : 'rain off';
@@ -1747,7 +1749,7 @@
     }
 
     function startBeachAmbience() {
-      if (!rainEnabled || !beachAudioAvailable || beachAudioPlaying) return;
+      if (!beachAmbienceEnabled || !beachAudioAvailable || beachAudioPlaying) return;
       try {
         if (beachAudio.paused) beachAudio.volume = 0;
         beachAudio.loop = true;
@@ -1862,7 +1864,8 @@
 
     function resumeFreshSession() {
       if (sessionMode !== 'decision' || decisionChoices.inert) return;
-      setRainEnabled(false, true);
+      // NO turns off feed rain without disabling ambience at the next checkpoint.
+      setRainEnabled(false, true, false);
       clearCheckpointSequence();
       decisionNo.blur?.();
       sessionMode = 'transition';
